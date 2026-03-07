@@ -56,7 +56,7 @@ module.exports = {
 
     // 设置 HolySheep 为默认 provider
     config.provider = 'holysheep'
-    config.model    = config.model || 'claude-sonnet-4-5'
+    config.model    = 'gpt-5.1-codex'  // HolySheep 支持的 Codex 专属模型
 
     if (!config.providers) config.providers = {}
     config.providers.holysheep = {
