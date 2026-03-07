@@ -4,15 +4,55 @@
 const inquirer  = require('inquirer')
 const chalk     = require('chalk')
 const ora       = require('ora')
+const { execSync, spawnSync } = require('child_process')
 const { saveConfig, getApiKey, BASE_URL_ANTHROPIC, BASE_URL_OPENAI, SHOP_URL } = require('../utils/config')
 const { writeEnvToShell } = require('../utils/shell')
 const TOOLS = require('../tools')
 
-const TOOL_CHOICES = TOOLS.map(t => ({
-  name: `${t.checkInstalled() ? chalk.green('●') : chalk.gray('○')}  ${t.name.padEnd(18)} ${t.checkInstalled() ? chalk.gray('(已安装)') : chalk.gray('(未安装)')}`,
-  value: t.id,
-  short: t.name,
-}))
+// 工具的自动安装命令（npm/pip）
+const AUTO_INSTALL = {
+  'claude-code': { cmd: 'npm install -g @anthropic-ai/claude-code', mgr: 'npm' },
+  'codex':       { cmd: 'npm install -g @openai/codex',             mgr: 'npm' },
+  'gemini-cli':  { cmd: 'npm install -g @google/gemini-cli',        mgr: 'npm' },
+  'opencode':    { cmd: 'npm install -g opencode-ai',               mgr: 'npm' },
+  'aider':       { cmd: 'pip install aider-chat',                   mgr: 'pip' },
+}
+
+function canAutoInstall(toolId) {
+  return !!AUTO_INSTALL[toolId]
+}
+
+async function tryAutoInstall(tool) {
+  const info = AUTO_INSTALL[tool.id]
+  if (!info) return false
+
+  // 检查 npm/pip 是否可用
+  try {
+    execSync(`${info.mgr} --version`, { stdio: 'ignore' })
+  } catch {
+    console.log(chalk.red(`  ✗ 未找到 ${info.mgr}，无法自动安装 ${tool.name}`))
+    return false
+  }
+
+  const spinner = ora(`正在安装 ${tool.name}...`).start()
+  try {
+    spawnSync(info.cmd.split(' ')[0], info.cmd.split(' ').slice(1), {
+      stdio: 'inherit',
+      shell: true,
+    })
+    // 安装后重新检测
+    if (tool.checkInstalled()) {
+      spinner.succeed(`${tool.name} 安装成功`)
+      return true
+    } else {
+      spinner.fail(`${tool.name} 安装后仍未检测到，请手动安装: ${chalk.cyan(info.cmd)}`)
+      return false
+    }
+  } catch (e) {
+    spinner.fail(`安装失败: ${e.message}`)
+    return false
+  }
+}
 
 async function setup(options) {
   console.log()
@@ -38,18 +78,36 @@ async function setup(options) {
     console.log(`${chalk.green('✓')} 使用已保存的 API Key: ${chalk.cyan(maskKey(apiKey))}`)
   }
 
-  // Step 2: 选择工具
+  // Step 2: 选择工具（已安装 + 未安装分组显示）
+  const installedTools   = TOOLS.filter(t => t.checkInstalled())
+  const uninstalledTools = TOOLS.filter(t => !t.checkInstalled())
+
+  const choices = []
+  if (installedTools.length) {
+    choices.push(new inquirer.Separator(chalk.green('── 已安装 ──')))
+    installedTools.forEach(t => choices.push({
+      name: `${chalk.green('●')}  ${t.name.padEnd(18)} ${chalk.gray('(已安装)')}`,
+      value: t.id,
+      short: t.name,
+      checked: true,  // 已安装的默认全选
+    }))
+  }
+  if (uninstalledTools.length) {
+    choices.push(new inquirer.Separator(chalk.gray('── 未安装（可自动安装）──')))
+    uninstalledTools.forEach(t => choices.push({
+      name: `${chalk.gray('○')}  ${t.name.padEnd(18)} ${canAutoInstall(t.id) ? chalk.cyan('(选中后自动安装)') : chalk.gray('(需手动安装)')}`,
+      value: t.id,
+      short: t.name,
+      checked: false,
+    }))
+  }
+
   const { toolIds } = await inquirer.prompt([{
     type: 'checkbox',
     name: 'toolIds',
     message: '选择要配置的工具（空格选中，回车确认）:',
-    choices: [
-      new inquirer.Separator('── 已安装 ──'),
-      ...TOOL_CHOICES.filter((_, i) => TOOLS[i].checkInstalled()),
-      new inquirer.Separator('── 未安装 ──'),
-      ...TOOL_CHOICES.filter((_, i) => !TOOLS[i].checkInstalled()),
-    ],
-    pageSize: 12,
+    choices,
+    pageSize: 14,
   }])
 
   if (toolIds.length === 0) {
@@ -59,12 +117,46 @@ async function setup(options) {
 
   console.log()
 
-  // Step 3: 配置每个工具
+  // Step 3: 对未安装但被选中的工具，询问是否自动安装
   const selectedTools = TOOLS.filter(t => toolIds.includes(t.id))
+  const needInstall = selectedTools.filter(t => !t.checkInstalled() && canAutoInstall(t.id))
+  const cantInstall = selectedTools.filter(t => !t.checkInstalled() && !canAutoInstall(t.id))
+
+  // 提示不能自动安装的工具
+  if (cantInstall.length) {
+    console.log(chalk.yellow(`以下工具需要手动安装后再运行 hs setup：`))
+    cantInstall.forEach(t => console.log(`  ${chalk.gray('→')} ${t.name}: ${chalk.cyan(t.installCmd)}`))
+    console.log()
+  }
+
+  // 自动安装可以安装的工具
+  if (needInstall.length) {
+    const { doInstall } = await inquirer.prompt([{
+      type: 'confirm',
+      name: 'doInstall',
+      message: `检测到 ${needInstall.map(t => chalk.cyan(t.name)).join('、')} 未安装，现在自动安装？`,
+      default: true,
+    }])
+
+    if (doInstall) {
+      for (const tool of needInstall) {
+        await tryAutoInstall(tool)
+      }
+      console.log()
+    }
+  }
+
+  // Step 4: 配置每个已安装的工具
   const envVarsToWrite = {}
   const results = []
+  const toConfigureTools = selectedTools.filter(t => t.checkInstalled())
 
-  for (const tool of selectedTools) {
+  if (toConfigureTools.length === 0) {
+    console.log(chalk.yellow('没有可配置的工具（请先安装），退出。'))
+    return
+  }
+
+  for (const tool of toConfigureTools) {
     const spinner = ora(`配置 ${tool.name}...`).start()
     try {
       const result = tool.configure(apiKey, BASE_URL_ANTHROPIC, BASE_URL_OPENAI)
@@ -74,7 +166,6 @@ async function setup(options) {
         result.steps.forEach((s, i) => console.log(`  ${chalk.gray(i + 1 + '.')} ${s}`))
         results.push({ tool, status: 'manual' })
       } else {
-        // 收集需要写入 shell 的环境变量
         if (result.envVars) Object.assign(envVarsToWrite, result.envVars)
         spinner.succeed(`${chalk.green(tool.name)} ${chalk.gray(result.file ? `→ ${result.file}` : '')}`)
         results.push({ tool, status: 'ok', result })
@@ -85,16 +176,15 @@ async function setup(options) {
     }
   }
 
-  // Step 4: 写入通用环境变量（如果有工具需要）
-  const needsEnvVars = selectedTools.some(t => t.id === 'codex' || t.id === 'aider')
+  // Step 5: 写入通用环境变量
+  const needsEnvVars = toConfigureTools.some(t => t.id === 'codex' || t.id === 'aider')
   if (needsEnvVars || Object.keys(envVarsToWrite).length > 0) {
-    const defaultEnv = {
+    Object.assign(envVarsToWrite, {
       ANTHROPIC_API_KEY: apiKey,
       ANTHROPIC_BASE_URL: BASE_URL_ANTHROPIC,
       OPENAI_API_KEY: apiKey,
       OPENAI_BASE_URL: BASE_URL_OPENAI,
-    }
-    Object.assign(envVarsToWrite, defaultEnv)
+    })
   }
 
   if (Object.keys(envVarsToWrite).length > 0) {
@@ -107,7 +197,7 @@ async function setup(options) {
     }
   }
 
-  // Step 5: 保存 API Key 到本地
+  // Step 6: 保存 API Key
   saveConfig({ apiKey })
 
   // 摘要
@@ -116,7 +206,7 @@ async function setup(options) {
   console.log(chalk.green.bold('✅ 配置完成！'))
   console.log()
 
-  const ok = results.filter(r => r.status === 'ok')
+  const ok     = results.filter(r => r.status === 'ok')
   const manual = results.filter(r => r.status === 'manual')
   const errors = results.filter(r => r.status === 'error')
 

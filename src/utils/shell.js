@@ -10,6 +10,10 @@ const MARKER_END   = '# <<< holysheep-cli managed <<<'
 
 function getShellRcFiles() {
   const home = os.homedir()
+
+  // Windows：不写 shell rc，改用 setx 写系统环境变量
+  if (process.platform === 'win32') return []
+
   const shell = process.env.SHELL || ''
   const candidates = []
 
@@ -19,7 +23,7 @@ function getShellRcFiles() {
 
   // 默认兜底
   if (candidates.length === 0) {
-    const zshrc = path.join(home, '.zshrc')
+    const zshrc  = path.join(home, '.zshrc')
     const bashrc = path.join(home, '.bashrc')
     if (fs.existsSync(zshrc))  candidates.push(zshrc)
     if (fs.existsSync(bashrc)) candidates.push(bashrc)
@@ -47,6 +51,19 @@ function buildEnvBlock(envVars) {
 }
 
 function writeEnvToShell(envVars) {
+  // Windows: 用 setx 写入用户级环境变量
+  if (process.platform === 'win32') {
+    const { execSync } = require('child_process')
+    const written = []
+    for (const [k, v] of Object.entries(envVars)) {
+      try {
+        execSync(`setx ${k} "${v}"`, { stdio: 'ignore' })
+        written.push(`[System Env] ${k}`)
+      } catch {}
+    }
+    return written
+  }
+
   const files = getShellRcFiles()
   const written = []
 
