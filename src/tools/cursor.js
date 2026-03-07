@@ -1,18 +1,18 @@
 /**
  * Cursor 适配器
- * Cursor 是基于 VSCode 的 AI 编辑器
  *
- * Cursor 自定义 API 配置路径:
- *   Settings > Cursor > Models > Custom API Key
- *   实际存储在: ~/Library/Application Support/Cursor/User/globalStorage/cursor.secretStorage/...
+ * ⚠️ 重要：Cursor 新版本（2025+）必须登录官方账号才能使用，
+ * 即使是「自带 API Key」模式也需要先登录 Cursor 账号。
+ * Cursor 的 API Key 和 Base URL 存储在加密的 secret storage 中，
+ * CLI 无法直接写入，且官方越来越绑定自己的账号体系。
  *
- * 由于 Cursor 的 API 配置在加密的 secret storage 中，CLI 无法直接写入，
- * 因此本适配器采用以下方式:
- *   1. 打印详细的手动配置引导
- *   2. 写入环境变量（部分 Cursor 功能如 API playground 会读取）
- *   3. 生成 .cursor/mcp.json 供 Cursor MCP 功能使用
+ * 推荐替代方案：
+ * - Continue（VS Code/JetBrains 插件，完全支持自定义 API）
+ * - Claude Code（命令行，官方支持自定义 base_url）
+ * - Aider（命令行，完全支持自定义 API）
  *
- * Cursor OpenAI 兼容格式: 在 Settings > Models 中填入 base URL 和 API Key
+ * 如果仍要手动配置 Cursor：
+ * Settings → Models → Override OpenAI Base URL + OpenAI API Key
  */
 const fs = require('fs')
 const path = require('path')
@@ -39,31 +39,33 @@ module.exports = {
   id: 'cursor',
   checkInstalled() { return checkCursorInstalled() },
   isConfigured() {
-    // Cursor 配置在加密存储中，无法直接读取，只检查环境变量
-    return !!(process.env.OPENAI_API_KEY && process.env.OPENAI_BASE_URL?.includes('holysheep'))
+    return false // 无法检测（加密存储）
   },
-  configure(apiKey, baseUrlOpenAI) {
-    // Cursor 无法通过文件直接写入 API Key（加密存储），
-    // 返回 manual 标志，setup 命令会打印引导信息
+  configure(apiKey, _baseUrlAnthropicNoV1, baseUrlOpenAI) {
+    // Cursor 需要登录官方账号，且 API Key 存储在加密区域，CLI 无法写入
+    // 返回 manual + warning
     return {
       manual: true,
       steps: [
-        '打开 Cursor → Settings（⌘+,）→ 搜索 "Models"',
-        '找到 "OpenAI API Key" 或 "Custom API" 区域',
+        '⚠️  Cursor 新版本需要先登录官方账号（免费账号即可）',
+        '打开 Cursor → Settings（⌘+, / Ctrl+,）→ 左侧 Models',
+        '找到 "OpenAI API Key" 区域，勾选 "Enable OpenAI API Key"',
         `填入 API Key: ${apiKey}`,
-        `填入 Base URL（Override OpenAI Base URL）: ${baseUrlOpenAI}`,
-        '点击 "Verify" 验证连接',
-        '在模型列表中选择 claude-sonnet-4-5 或 claude-opus-4-5',
+        `填入 Override OpenAI Base URL: ${baseUrlOpenAI}`,
+        '点击 "Verify" 验证连接，然后在模型列表中选择 claude-* 模型',
+        '💡 推荐使用 Continue（VS Code 插件）替代，配置更简单',
       ],
-      imageHint: '💡 Cursor Settings → Models → Override OpenAI Base URL',
     }
   },
   reset() {
-    // 提示手动清除
-    return { manual: true, steps: ['打开 Cursor Settings → Models → 清除 API Key 和 Base URL'] }
+    return {
+      manual: true,
+      steps: ['打开 Cursor Settings → Models → 清除 API Key 和 Override Base URL'],
+    }
   },
   getConfigPath() { return getCursorUserDir() },
-  hint: '需要在 Cursor GUI 中手动配置（API Key 存储在加密区域）',
+  hint: '需要登录 Cursor 账号 + 在 GUI 中手动配置（推荐用 Continue 替代）',
   installCmd: '访问 https://cursor.sh 下载安装',
   docsUrl: 'https://cursor.sh',
+  unsupported: true,
 }

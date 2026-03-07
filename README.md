@@ -34,16 +34,20 @@ Instead of manually editing config files and environment variables for each tool
 
 ### Supported Tools
 
-| Tool | Install | Config Method | Hot Reload |
-|------|---------|---------------|-----------|
-| [Claude Code](https://docs.anthropic.com/claude-code) | `npm i -g @anthropic-ai/claude-code` | `~/.claude/settings.json` | ✅ |
-| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | `~/.codex/config.yaml` | — |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | `~/.gemini/settings.json` | — |
-| [OpenCode](https://github.com/sst/opencode) | `npm i -g opencode-ai` | `~/.config/opencode/config.json` | — |
-| [OpenClaw](https://github.com/iOfficeAI/AionUi) | Download from website | `~/.openclaw/settings.json` | ✅ |
-| [Aider](https://aider.chat) | `pip install aider-chat` | `~/.aider.conf.yml` | — |
-| [Cursor](https://cursor.sh) | Download from website | GUI guided setup | — |
-| [Continue.dev](https://continue.dev) | VS Code marketplace | `~/.continue/config.json` | ✅ |
+| Tool | Install | Config Method | Status |
+|------|---------|---------------|--------|
+| [Claude Code](https://docs.anthropic.com/claude-code) | `npm i -g @anthropic-ai/claude-code` | `~/.claude/settings.json` | ✅ Auto |
+| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | `~/.codex/config.toml` | ✅ Auto |
+| [Aider](https://aider.chat) | `pip install aider-install && aider-install` | `~/.aider.conf.yml` | ✅ Auto |
+| [Continue.dev](https://continue.dev) | VS Code marketplace | `~/.continue/config.yaml` | ✅ Auto |
+| [OpenCode](https://github.com/sst/opencode) | `npm i -g opencode-ai` | `~/.config/opencode/config.json` | ✅ Auto |
+| [OpenClaw](https://github.com/iOfficeAI/AionUi) | Download from website | `~/.openclaw/settings.json` | ✅ Auto |
+| [Cursor](https://cursor.sh) | Download from website | GUI only (encrypted storage) | ⚠️ Manual |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google protocol only | ❌ Not supported |
+
+> **Note on Cursor**: Cursor (2025+) requires logging into the official Cursor account. API keys are stored in encrypted secret storage that CLI cannot access. Manual configuration via `Settings → Models → Override OpenAI Base URL` is required after login.
+>
+> **Note on Gemini CLI**: Gemini CLI uses Google's proprietary protocol and does not support custom relay endpoints. Use your own Google Gemini API Key from [aistudio.google.com](https://aistudio.google.com/apikey).
 
 ### Installation
 
@@ -124,16 +128,20 @@ HolySheep 是面向中国开发者的 Claude/GPT/Gemini 官方 API 中转服务�
 
 ### 支持的工具
 
-| 工具 | 安装方式 | 配置方式 | 热切换 |
-|------|---------|---------|-------|
-| [Claude Code](https://docs.anthropic.com/claude-code) | `npm i -g @anthropic-ai/claude-code` | `~/.claude/settings.json` | ✅ |
-| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | `~/.codex/config.yaml` | — |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | `~/.gemini/settings.json` | — |
-| [OpenCode](https://github.com/sst/opencode) | `npm i -g opencode-ai` | `~/.config/opencode/config.json` | — |
-| [OpenClaw](https://github.com/iOfficeAI/AionUi) | 官网下载 | `~/.openclaw/settings.json` | ✅ |
-| [Aider](https://aider.chat) | `pip install aider-chat` | `~/.aider.conf.yml` | — |
-| [Cursor](https://cursor.sh) | 官网下载 | 引导式 GUI 配置 | — |
-| [Continue.dev](https://continue.dev) | VS Code 插件市场 | `~/.continue/config.json` | ✅ |
+| 工具 | 安装方式 | 配置方式 | 状态 |
+|------|---------|---------|------|
+| [Claude Code](https://docs.anthropic.com/claude-code) | `npm i -g @anthropic-ai/claude-code` | `~/.claude/settings.json` | ✅ 自动 |
+| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | `~/.codex/config.toml` | ✅ 自动 |
+| [Aider](https://aider.chat) | `pip install aider-install && aider-install` | `~/.aider.conf.yml` | ✅ 自动 |
+| [Continue.dev](https://continue.dev) | VS Code 插件市场 | `~/.continue/config.yaml` | ✅ 自动 |
+| [OpenCode](https://github.com/sst/opencode) | `npm i -g opencode-ai` | `~/.config/opencode/config.json` | ✅ 自动 |
+| [OpenClaw](https://github.com/iOfficeAI/AionUi) | 官网下载 | `~/.openclaw/settings.json` | ✅ 自动 |
+| [Cursor](https://cursor.sh) | 官网下载 | GUI 手动配置（加密存储） | ⚠️ 手动 |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | 仅支持 Google 官方协议 | ❌ 不支持 |
+
+> **关于 Cursor**：Cursor 新版（2025+）必须登录官方账号，API Key 存储在加密区域，CLI 无法写入。需登录后在 `Settings → Models → Override OpenAI Base URL` 手动填入。
+>
+> **关于 Gemini CLI**：Gemini CLI 使用 Google 专有协议，不支持自定义中转地址。需使用从 [aistudio.google.com](https://aistudio.google.com/apikey) 获取的 Google Gemini API Key。
 
 ### 安装
 
