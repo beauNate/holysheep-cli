@@ -23,6 +23,33 @@ program
 支持工具: Claude Code · Codex · Gemini CLI · OpenCode · OpenClaw · Aider · Cursor · Continue
 `)
 
+// ── login ────────────────────────────────────────────────────────────────────
+program
+  .command('login')
+  .description('登录 HolySheep，保存 API Key 到本地')
+  .action(async () => {
+    const { login } = require('./commands/login')
+    await login()
+  })
+
+// ── logout ───────────────────────────────────────────────────────────────────
+program
+  .command('logout')
+  .description('退出登录，清除本地 API Key')
+  .action(async () => {
+    const { logout } = require('./commands/login')
+    await logout()
+  })
+
+// ── whoami ───────────────────────────────────────────────────────────────────
+program
+  .command('whoami')
+  .description('显示当前登录状态')
+  .action(async () => {
+    const { whoami } = require('./commands/login')
+    await whoami()
+  })
+
 // ── setup ────────────────────────────────────────────────────────────────────
 program
   .command('setup')
@@ -86,12 +113,14 @@ program
     printBanner()
     console.log()
     console.log(chalk.cyan('快速开始:'))
+    console.log(`  ${chalk.bold('hs login')}    登录并保存 API Key`)
     console.log(`  ${chalk.bold('hs setup')}    一键配置所有 AI 工具`)
+    console.log(`  ${chalk.bold('hs whoami')}   查看当前登录状态`)
     console.log(`  ${chalk.bold('hs doctor')}   检查配置状态`)
     console.log(`  ${chalk.bold('hs balance')}  查看账户余额`)
     console.log(`  ${chalk.bold('hs tools')}    查看支持的工具列表`)
     console.log()
-    console.log(chalk.gray(`注册账号: https://shop.holysheep.ai`))
+    console.log(chalk.gray(`注册账号: https://holysheep.ai`))
     console.log()
   })
 

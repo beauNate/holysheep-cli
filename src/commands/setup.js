@@ -74,7 +74,8 @@ async function setup(options) {
 
   if (!apiKey) {
     console.log(chalk.yellow('需要 API Key 才能配置工具。'))
-    console.log(chalk.cyan(`还没有账号？前往注册：${SHOP_URL}\n`))
+    console.log(chalk.cyan(`还没有账号？前往注册：${SHOP_URL}`))
+    console.log(chalk.gray(`提示：可先运行 ${chalk.cyan('hs login')} 登录并保存 Key，之后 setup 将自动读取。\n`))
 
     const { key } = await inquirer.prompt([{
       type: 'password',
