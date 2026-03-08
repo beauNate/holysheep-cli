@@ -51,6 +51,9 @@ async function tryAutoInstall(tool) {
     if (process.platform !== 'win32' && !tool.checkInstalled()) {
       console.log(chalk.yellow(`  ⚠ 安装后未检测到命令，尝试直接配置...`))
     }
+    if (process.platform === 'win32') {
+      tool._winJustInstalled = true  // 标记为 Windows 刚装的，摘要里特殊处理
+    }
     return true  // 安装成功就视为可配置
   } catch (e) {
     spinner.fail(`安装失败: ${e.message}`)
@@ -236,11 +239,20 @@ async function setup(options) {
       if (r.tool.hint) console.log(`    ${chalk.gray('💡 ' + r.tool.hint)}`)
       // 显示启动命令
       if (r.tool.launchCmd) {
-        console.log(`    ${chalk.gray('▶  启动命令:')} ${chalk.cyan.bold(r.tool.launchCmd)}`)
+        if (r.tool._winJustInstalled) {
+          // Windows 刚安装：PATH 未刷新，提示用 npx 或重开终端
+          console.log(`    ${chalk.yellow('▶  Windows：新开一个终端后运行:')} ${chalk.cyan.bold(r.tool.launchCmd)}`)
+          const cmdBin = r.tool.launchCmd.split(' ')[0]
+          const cmdArgs = r.tool.launchCmd.split(' ').slice(1).join(' ')
+          console.log(`    ${chalk.gray('   或现在用 npx 直接运行:')} ${chalk.cyan.bold('npx ' + cmdBin + (cmdArgs ? ' ' + cmdArgs : ''))}`)
+          if (r.tool.launchNote) console.log(`    ${chalk.gray('   ' + r.tool.launchNote)}`)
+        } else {
+          console.log(`    ${chalk.gray('▶  启动命令:')} ${chalk.cyan.bold(r.tool.launchCmd)}`)
+        }
       } else if (r.tool.launchNote) {
         console.log(`    ${chalk.gray('▶  ' + r.tool.launchNote)}`)
       }
-      if (r.tool.launchNote && r.tool.launchCmd) {
+      if (r.tool.launchNote && r.tool.launchCmd && !r.tool._winJustInstalled) {
         console.log(`    ${chalk.gray('   ' + r.tool.launchNote)}`)
       }
     })
