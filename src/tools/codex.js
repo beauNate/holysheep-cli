@@ -154,6 +154,7 @@ module.exports = {
   },
   getConfigPath() { return CONFIG_FILE },
   hint: '切换后重开终端生效；Rust Codex (v0.111+) 使用 config.toml',
+  launchCmd: 'codex',
   installCmd: 'npm install -g @openai/codex',
   docsUrl: 'https://github.com/openai/codex',
   envVarFormat: 'openai',

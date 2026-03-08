@@ -139,6 +139,8 @@ module.exports = {
   },
   getConfigPath() { return fs.existsSync(CONFIG_YAML) ? CONFIG_YAML : CONFIG_JSON },
   hint: '新版使用 config.yaml；配置后在 VS Code Continue 面板选择 HolySheep 模型',
+  launchCmd: null,  // VS Code 插件，在编辑器内使用
+  launchNote: '在 VS Code 侧边栏打开 Continue 面板即可使用',
   installCmd: 'VS Code 插件市场搜索 "Continue"',
   docsUrl: 'https://continue.dev',
 }

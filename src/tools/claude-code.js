@@ -64,6 +64,7 @@ module.exports = {
   },
   getConfigPath() { return SETTINGS_FILE },
   hint: '支持热切换，无需重启终端',
+  launchCmd: 'claude',
   installCmd: 'npm install -g @anthropic-ai/claude-code',
   docsUrl: 'https://docs.anthropic.com/claude-code',
 }

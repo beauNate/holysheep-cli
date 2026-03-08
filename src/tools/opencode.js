@@ -122,6 +122,7 @@ module.exports = {
   },
   getConfigPath() { return getConfigFile() },
   hint: '切换后重启 OpenCode 生效；配置文件: ~/.config/opencode/opencode.json',
+  launchCmd: 'opencode',
   installCmd: 'brew install anomalyco/tap/opencode  # 或: npm i -g opencode-ai@latest',
   docsUrl: 'https://opencode.ai',
 }

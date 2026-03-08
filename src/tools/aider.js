@@ -66,6 +66,7 @@ model: openai/claude-sonnet-4-5
   },
   getConfigPath() { return CONFIG_FILE },
   hint: '也可用 aider --openai-api-base https://api.holysheep.ai/v1',
+  launchCmd: 'aider',
   installCmd: 'pip install aider-chat',
   docsUrl: 'https://aider.chat',
   // Aider 优先用环境变量

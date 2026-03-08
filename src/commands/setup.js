@@ -234,6 +234,15 @@ async function setup(options) {
       const hot = r.result?.hot ? chalk.cyan(' (热切换，无需重启)') : chalk.gray(' (重启终端生效)')
       console.log(`  ✓ ${r.tool.name}${hot}`)
       if (r.tool.hint) console.log(`    ${chalk.gray('💡 ' + r.tool.hint)}`)
+      // 显示启动命令
+      if (r.tool.launchCmd) {
+        console.log(`    ${chalk.gray('▶  启动命令:')} ${chalk.cyan.bold(r.tool.launchCmd)}`)
+      } else if (r.tool.launchNote) {
+        console.log(`    ${chalk.gray('▶  ' + r.tool.launchNote)}`)
+      }
+      if (r.tool.launchNote && r.tool.launchCmd) {
+        console.log(`    ${chalk.gray('   ' + r.tool.launchNote)}`)
+      }
     })
     console.log()
   }
