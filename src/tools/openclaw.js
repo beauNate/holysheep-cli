@@ -43,7 +43,7 @@ function writeCorrectConfig(apiKey, baseUrl) {
   const config = {
     agents: {
       defaults: {
-        model: { primary: 'custom/claude-sonnet-4-6' }
+        model: { primary: 'claude-sonnet-4-6' }
       }
     },
     gateway: {
