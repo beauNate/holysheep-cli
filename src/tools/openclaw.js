@@ -85,13 +85,16 @@ module.exports = {
       _writeFallbackConfig(apiKey, baseUrl)
     }
 
-    // 3. 读取 token
+    // 3. 先停旧 gateway，让新配置的 token 生效
+    npx('gateway', 'stop')
+
+    // 4. 读取新 token
     let token = ''
     try {
       token = readConfig()?.gateway?.auth?.token || ''
     } catch {}
 
-    // 4. 启动 Gateway
+    // 5. 启动 Gateway
     console.log(chalk.gray('  → 正在启动 Gateway...'))
     const ok = _startGateway()
 
@@ -120,7 +123,7 @@ module.exports = {
   get launchNote() {
     try {
       const token = readConfig()?.gateway?.auth?.token
-      if (token) return `🌐 浏览器打开（含 token）: http://127.0.0.1:18789/?token=${token}`
+      if (token) return `🌐 复制此链接到浏览器（含 token）:\n       http://127.0.0.1:18789/?token=${token}`
     } catch {}
     return '🌐 打开浏览器: http://127.0.0.1:18789/'
   },
