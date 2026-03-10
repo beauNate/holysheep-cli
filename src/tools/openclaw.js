@@ -43,7 +43,7 @@ function writeCorrectConfig(apiKey, baseUrl) {
   const config = {
     agents: {
       defaults: {
-        model: { primary: 'claude-sonnet-4-6' }
+        model: { primary: 'anthropic/claude-sonnet-4-6' }
       }
     },
     gateway: {
@@ -55,14 +55,8 @@ function writeCorrectConfig(apiKey, baseUrl) {
         token,
       }
     },
-    // Custom provider — OpenAI-compatible
-    providers: {
-      custom: {
-        baseUrl,              // https://api.holysheep.ai
-        apiKey,
-        compatibility: 'anthropic',
-      }
-    }
+    // 不需要 custom provider，通过 env 覆盖 Anthropic base URL 即可
+    // openclaw 读 ANTHROPIC_BASE_URL 后用 anthropic/ 前缀模型
   }
 
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8')
