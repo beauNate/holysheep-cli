@@ -47,6 +47,7 @@ function writeCorrectConfig(apiKey, baseUrl) {
       }
     },
     gateway: {
+      mode: 'local',          // 必须设置，否则 gateway start 被 blocked
       port: 18789,
       bind: 'loopback',       // 新格式，不用 "127.0.0.1"
       auth: {
