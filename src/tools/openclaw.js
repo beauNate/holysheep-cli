@@ -70,9 +70,9 @@ function buildFullConfig(existing, apiKey, baseUrlAnthropicNoV1, baseUrlOpenAI) 
   // ── 3. 默认模型 ────────────────────────────────────────────────────
   if (!config.agents) config.agents = {}
   if (!config.agents.defaults) config.agents.defaults = {}
-  // 总是覆写为 HolySheep sonnet-4-6（用户可以在 /model 命令里切换）
+  // 总是覆写为 HolySheep 最新 Sonnet（用户可以在 /model 命令里切换）
   config.agents.defaults.model = {
-    primary: 'anthropic/claude-sonnet-4-6',
+    primary: 'anthropic/claude-sonnet-4-5-20250929',
   }
 
   // ── 4. 自定义 holysheep provider（OpenAI-compatible，支持所有模型）
@@ -84,7 +84,6 @@ function buildFullConfig(existing, apiKey, baseUrlAnthropicNoV1, baseUrlOpenAI) 
     apiKey,
     api:     'openai-completions',
     models: [
-      { id: 'claude-sonnet-4-6',          name: 'Claude Sonnet 4.6 (HolySheep)'  },
       { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5 (HolySheep)' },
       { id: 'claude-sonnet-4-20250514',   name: 'Claude Sonnet 4 (HolySheep)'   },
       { id: 'claude-opus-4-5-20251101',   name: 'Claude Opus 4.5 (HolySheep)'   },
@@ -138,8 +137,8 @@ module.exports = {
 
     writeConfig(config)
 
-    // 自动启动 Gateway，用户直接打开浏览器即可
-    _autoStartGateway()
+    // 自动初始化并启动 Gateway
+    _initAndStartGateway()
 
     return { file: CONFIG_FILE, hot: false, _gatewayStarted: true }
   },
@@ -168,42 +167,64 @@ module.exports = {
 }
 
 /**
- * 自动在后台启动 OpenClaw Gateway
+ * 自动初始化并启动 OpenClaw Gateway
  *
- * 策略（按顺序尝试）：
- *   1. openclaw gateway start   — 已有 daemon/service 直接启动
- *   2. openclaw gateway --port 18789  (detached)  — 前台守护模式
- *
- * 不调用 onboard，因为配置文件已由 configure() 完整写入。
+ * 策略：
+ *   1. openclaw onboard --non-interactive --install-daemon
+ *      读取已写好的 openclaw.json，无交互完成初始化 + 注册系统服务 + 启动 gateway
+ *   2. 若 onboard 失败（如 Windows 不支持 daemon），直接 gateway start
+ *   3. 仍失败 → Windows: start /B openclaw gateway；Unix: detached spawn
  */
-function _autoStartGateway() {
+function _initAndStartGateway() {
   const chalk = require('chalk')
+  const isWin = process.platform === 'win32'
   const bin   = 'openclaw'
 
-  console.log(chalk.gray('\n  ⚙️  正在启动 OpenClaw Gateway...'))
+  console.log(chalk.gray('\n  ⚙️  正在初始化并启动 OpenClaw Gateway（约 15 秒）...'))
 
-  // 先尝试 gateway start（若已注册为系统服务则直接生效）
-  const r1 = spawnSync(bin, ['gateway', 'start'], {
+  // Step 1: 无交互 onboard + install-daemon
+  const r1 = spawnSync(bin, ['onboard', '--non-interactive', '--install-daemon'], {
+    shell:   true,
+    timeout: 60000,
+    stdio:   'pipe',
+    env: { ...process.env },
+  })
+
+  if (r1.status === 0) {
+    console.log(chalk.green('  ✓ OpenClaw 初始化完成，Gateway 已在后台启动'))
+    console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
+    return
+  }
+
+  // Step 2: onboard 失败，直接 gateway start
+  const r2 = spawnSync(bin, ['gateway', 'start'], {
     shell:   true,
     timeout: 15000,
     stdio:   'pipe',
   })
-  if (r1.status === 0) {
-    console.log(chalk.green('  ✓ OpenClaw Gateway 已在后台启动'))
+  if (r2.status === 0) {
+    console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
+    console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
     return
   }
 
-  // 没有 daemon → 直接 detached 前台守护运行
-  const { spawn } = require('child_process')
-  const child = spawn(bin, ['gateway', '--port', '18789'], {
-    shell:    true,
-    detached: true,
-    stdio:    'ignore',
-  })
-  child.unref()
+  // Step 3: fallback — 后台守护进程
+  if (isWin) {
+    // Windows: 用 cmd start 开新窗口后台运行
+    spawnSync('cmd', ['/c', `start /B "" openclaw gateway --port 18789`], {
+      shell: true, stdio: 'ignore',
+    })
+  } else {
+    const { spawn } = require('child_process')
+    const child = spawn(bin, ['gateway', '--port', '18789'], {
+      detached: true,
+      stdio:    'ignore',
+    })
+    child.unref()
+  }
 
-  // 等 2 秒让 gateway 起来
-  spawnSync('node', ['-e', 'setTimeout(()=>{},2000)'], { timeout: 3000 })
+  // 等 3 秒让 gateway 起来
+  const t = Date.now(); while (Date.now() - t < 3000) {}
 
   console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
   console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
