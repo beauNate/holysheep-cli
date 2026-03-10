@@ -68,7 +68,7 @@ function writeCorrectConfig(apiKey, baseUrl) {
     profiles: {
       holysheep: {
         provider: 'anthropic',
-        key:      apiKey,
+        apiKey,           // openclaw 用 apiKey 字段
         baseUrl:  baseUrl,
       }
     },
@@ -107,10 +107,29 @@ module.exports = {
     const chalk = require('chalk')
     console.log(chalk.gray('\n  ⚙️  正在配置 OpenClaw...'))
 
-    // 1. 写入正确格式配置
+    // 1. 删除旧配置确保干净
+    try { fs.unlinkSync(CONFIG_FILE) } catch {}
+    const authProfilePath = path.join(OPENCLAW_DIR, 'agents', 'main', 'agent', 'auth-profiles.json')
+    try { fs.unlinkSync(authProfilePath) } catch {}
+
+    // 2. 用 openclaw 官方命令写入 auth（让 openclaw 自己生成正确格式）
+    //    --anthropic-api-key 直接写入 auth-profiles.json
+    console.log(chalk.gray('  → 写入 API Key...'))
+    const authResult = npx(
+      'onboard',
+      '--non-interactive',
+      '--anthropic-api-key', apiKey,
+      '--anthropic-base-url', baseUrlAnthropicNoV1,
+      '--skip-gateway',
+      '--skip-channels',
+      '--skip-daemon',
+    )
+
+    // 不管 onboard 结果如何，继续写 gateway config
+    // 3. 写入正确格式配置（gateway 部分）
     writeCorrectConfig(apiKey, baseUrlAnthropicNoV1)
 
-    // 2. doctor --fix 修复任何兼容性问题
+    // 4. doctor --fix 修复任何兼容性问题
     npx('doctor', '--fix')
 
     // 读取写入的 token（用于生成带 token 的直接访问 URL）
