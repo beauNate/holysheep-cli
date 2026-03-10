@@ -63,12 +63,19 @@ module.exports = {
 
     // 1. 先停旧 gateway（必须在 onboard 之前，否则 hot-reload 会覆盖新 token）
     npx('gateway', 'stop')
-    // Windows 额外 kill 残留进程
-    if (isWin) {
-      try { execSync('taskkill /F /IM node.exe /FI "WINDOWTITLE eq OpenClaw*" 2>nul', { shell: true, stdio: 'ignore' }) } catch {}
-    }
-    // 等 500ms 让端口释放
-    const t0 = Date.now(); while (Date.now() - t0 < 500) {}
+    // 强制 kill 占用 18789 端口的进程（gateway stop 停不掉手动启动的进程）
+    try {
+      if (isWin) {
+        // netstat 找 pid，然后 taskkill
+        const out = execSync('netstat -ano | findstr :18789', { shell: true, encoding: 'utf8', stdio: 'pipe' })
+        const match = out.match(/\s(\d+)\s*$/)
+        if (match) execSync(`taskkill /F /PID ${match[1]}`, { shell: true, stdio: 'ignore' })
+      } else {
+        execSync('lsof -ti:18789 | xargs kill -9 2>/dev/null || true', { shell: true, stdio: 'ignore' })
+      }
+    } catch {}
+    // 等 1s 让端口释放
+    const t0 = Date.now(); while (Date.now() - t0 < 1000) {}
 
     // 2. 删除旧配置，确保 onboard 会重新写入
     try { fs.unlinkSync(CONFIG_FILE) } catch {}
