@@ -99,19 +99,31 @@ module.exports = {
     // 2. doctor --fix 修复任何兼容性问题
     npx('doctor', '--fix')
 
+    // 读取写入的 token（用于生成带 token 的直接访问 URL）
+    let savedToken = ''
+    try {
+      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
+      savedToken = cfg?.gateway?.auth?.token || ''
+    } catch {}
+
     // 3. 启动 Gateway
     console.log(chalk.gray('  → 正在启动 Gateway...'))
     const ok = _startGateway()
 
     if (ok) {
       console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
-      console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
     } else {
-      console.log(chalk.yellow('  ⚠️  请手动启动 Gateway：'))
-      console.log(chalk.cyan(isWin ? '  npx openclaw gateway' : '  openclaw gateway'))
+      console.log(chalk.yellow('  ⚠️  Gateway 正在启动，请稍等几秒...'))
     }
 
-    return { file: CONFIG_FILE, hot: false }
+    // 打印带 token 的直接访问 URL（无需手动填 token）
+    const dashUrl = savedToken
+      ? `http://127.0.0.1:18789/?token=${savedToken}`
+      : 'http://127.0.0.1:18789/'
+    console.log(chalk.cyan(`\n  → 浏览器打开（已含 token，直接可用）:`))
+    console.log(chalk.bold.cyan(`     ${dashUrl}`))
+
+    return { file: CONFIG_FILE, hot: false, _dashUrl: dashUrl }
   },
 
   reset() {
@@ -122,9 +134,13 @@ module.exports = {
   hint: 'Gateway 已启动，打开浏览器即可使用',
   launchCmd: null,
   get launchNote() {
-    return isWin
-      ? '🌐 打开浏览器: http://127.0.0.1:18789/\n    如无法访问: npx openclaw gateway'
-      : '🌐 打开浏览器: http://127.0.0.1:18789/'
+    // 读取 token，生成带 token 的 URL
+    try {
+      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
+      const token = cfg?.gateway?.auth?.token
+      if (token) return `🌐 浏览器打开（含 token）: http://127.0.0.1:18789/?token=${token}`
+    } catch {}
+    return '🌐 打开浏览器: http://127.0.0.1:18789/'
   },
   installCmd: 'npm install -g openclaw@latest',
   docsUrl:    'https://docs.openclaw.ai',
