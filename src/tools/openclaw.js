@@ -55,17 +55,16 @@ function buildFullConfig(existing, apiKey, baseUrlAnthropicNoV1, baseUrlOpenAI) 
   config.env.ANTHROPIC_API_KEY  = apiKey
   config.env.ANTHROPIC_BASE_URL = baseUrlAnthropicNoV1   // https://api.holysheep.ai
 
-  // ── 2. Auth profile（Custom Provider，Anthropic-compatible）────────
-  // openclaw 通过 auth profile 管理凭证；写入一个 holysheep profile
+  // ── 2. Auth profile — openclaw 官方格式（Anthropic API key）─────────
+  // 参考: docs.openclaw.ai — auth profile type=anthropic-api-key
   if (!config.auth) config.auth = {}
   if (!config.auth.profiles) config.auth.profiles = {}
   config.auth.profiles.holysheep = {
-    type:     'api-key',
     provider: 'anthropic',
-    apiKey,
+    key:      apiKey,
     baseUrl:  baseUrlAnthropicNoV1,
   }
-  config.auth.default = 'holysheep'
+  // 不设 auth.default — openclaw 不认识这个字段
 
   // ── 3. 默认模型 ────────────────────────────────────────────────────
   if (!config.agents) config.agents = {}
@@ -94,10 +93,13 @@ function buildFullConfig(existing, apiKey, baseUrlAnthropicNoV1, baseUrlOpenAI) 
     ],
   }
 
-  // ── 5. Gateway 配置（如未设置则初始化，保留已有配置）────────────────
+  // ── 5. Gateway 配置（使用 openclaw 2026+ 格式）──────────────────────
   if (!config.gateway) config.gateway = {}
   if (!config.gateway.port) config.gateway.port = 18789
-  if (!config.gateway.bind) config.gateway.bind = '127.0.0.1'
+  // bind 用新格式的 mode，不用 IP 字符串
+  if (!config.gateway.bind || config.gateway.bind === '127.0.0.1' || config.gateway.bind === 'localhost') {
+    config.gateway.bind = 'loopback'
+  }
   // 生成 gateway token（若已有则不覆盖）
   if (!config.gateway.auth) config.gateway.auth = {}
   if (!config.gateway.auth.token) {
@@ -105,10 +107,8 @@ function buildFullConfig(existing, apiKey, baseUrlAnthropicNoV1, baseUrlOpenAI) 
     config.gateway.auth.mode  = 'token'
   }
 
-  // ── 6. Workspace 默认路径 ─────────────────────────────────────────
-  if (!config.workspace) {
-    config.workspace = path.join(OPENCLAW_DIR, 'workspace')
-  }
+  // ── 6. 不写 workspace 字段（openclaw 不认识，会报 unknown key）──────
+  delete config.workspace
 
   return config
 }
@@ -197,26 +197,36 @@ function _initAndStartGateway() {
 
   console.log(chalk.gray('\n  ⚙️  正在启动 OpenClaw Gateway...'))
 
+  // Step 0: 先 doctor --fix 修复配置兼容性问题
+  spawnSync(isWin ? 'npx' : bin,
+    isWin ? ['openclaw', 'doctor', '--fix'] : ['doctor', '--fix'],
+    { shell: true, timeout: 15000, stdio: 'ignore' }
+  )
+
   // Step 1: gateway start（已有 daemon 时直接生效）
-  const r1 = spawnSync(bin, ['gateway', 'start'], {
-    shell: true, timeout: 10000, stdio: 'pipe',
-  })
+  const r1 = spawnSync(
+    isWin ? 'npx' : bin,
+    isWin ? ['openclaw', 'gateway', 'start'] : ['gateway', 'start'],
+    { shell: true, timeout: 10000, stdio: 'pipe' }
+  )
   if (r1.status === 0) {
     console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
     console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
     return
   }
 
-  // Step 2: 无交互 onboard --install-daemon（注册系统服务）
-  console.log(chalk.gray('  → 首次初始化，注册系统服务...'))
-  const r2 = spawnSync(bin, ['onboard', '--non-interactive', '--install-daemon'], {
-    shell: true, timeout: 60000, stdio: 'pipe',
-    env: { ...process.env },
-  })
-  // 再次尝试 start
-  const r3 = spawnSync(bin, ['gateway', 'start'], {
-    shell: true, timeout: 10000, stdio: 'pipe',
-  })
+  // Step 2: 安装系统服务 + 启动
+  console.log(chalk.gray('  → 注册系统服务...'))
+  spawnSync(
+    isWin ? 'npx' : bin,
+    isWin ? ['openclaw', 'gateway', 'install'] : ['gateway', 'install'],
+    { shell: true, timeout: 30000, stdio: 'ignore' }
+  )
+  const r3 = spawnSync(
+    isWin ? 'npx' : bin,
+    isWin ? ['openclaw', 'gateway', 'start'] : ['gateway', 'start'],
+    { shell: true, timeout: 10000, stdio: 'pipe' }
+  )
   if (r3.status === 0) {
     console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
     console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
