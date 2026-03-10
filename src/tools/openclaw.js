@@ -181,52 +181,81 @@ function _initAndStartGateway() {
   const isWin = process.platform === 'win32'
   const bin   = 'openclaw'
 
-  console.log(chalk.gray('\n  ⚙️  正在初始化并启动 OpenClaw Gateway（约 15 秒）...'))
+  console.log(chalk.gray('\n  ⚙️  正在启动 OpenClaw Gateway...'))
 
-  // Step 1: 无交互 onboard + install-daemon
-  const r1 = spawnSync(bin, ['onboard', '--non-interactive', '--install-daemon'], {
-    shell:   true,
-    timeout: 60000,
-    stdio:   'pipe',
-    env: { ...process.env },
+  // Step 1: gateway start（已有 daemon 时直接生效）
+  const r1 = spawnSync(bin, ['gateway', 'start'], {
+    shell: true, timeout: 10000, stdio: 'pipe',
   })
-
   if (r1.status === 0) {
-    console.log(chalk.green('  ✓ OpenClaw 初始化完成，Gateway 已在后台启动'))
-    console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
-    return
-  }
-
-  // Step 2: onboard 失败，直接 gateway start
-  const r2 = spawnSync(bin, ['gateway', 'start'], {
-    shell:   true,
-    timeout: 15000,
-    stdio:   'pipe',
-  })
-  if (r2.status === 0) {
     console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
     console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
     return
   }
 
-  // Step 3: fallback — 后台守护进程
+  // Step 2: 无交互 onboard --install-daemon（注册系统服务）
+  console.log(chalk.gray('  → 首次初始化，注册系统服务...'))
+  const r2 = spawnSync(bin, ['onboard', '--non-interactive', '--install-daemon'], {
+    shell: true, timeout: 60000, stdio: 'pipe',
+    env: { ...process.env },
+  })
+  // 再次尝试 start
+  const r3 = spawnSync(bin, ['gateway', 'start'], {
+    shell: true, timeout: 10000, stdio: 'pipe',
+  })
+  if (r3.status === 0) {
+    console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
+    console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
+    return
+  }
+
+  // Step 3: fallback — 直接后台运行进程
+  console.log(chalk.gray('  → 以守护进程模式启动...'))
   if (isWin) {
-    // Windows: 用 cmd start 开新窗口后台运行
-    spawnSync('cmd', ['/c', `start /B "" openclaw gateway --port 18789`], {
-      shell: true, stdio: 'ignore',
-    })
+    // Windows: PowerShell Start-Process 后台运行，不弹窗
+    spawnSync('powershell', [
+      '-NonInteractive', '-WindowStyle', 'Hidden', '-Command',
+      `Start-Process -FilePath "openclaw" -ArgumentList "gateway","--port","18789" -WindowStyle Hidden`
+    ], { shell: false, timeout: 5000, stdio: 'ignore' })
   } else {
     const { spawn } = require('child_process')
     const child = spawn(bin, ['gateway', '--port', '18789'], {
-      detached: true,
-      stdio:    'ignore',
+      detached: true, stdio: 'ignore',
     })
     child.unref()
   }
 
-  // 等 3 秒让 gateway 起来
-  const t = Date.now(); while (Date.now() - t < 3000) {}
+  // 等 4 秒让 gateway 起来再报告
+  const deadline = Date.now() + 4000
+  while (Date.now() < deadline) {}
 
-  console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
-  console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
+  // 验证是否真的起来了
+  const http = require('http')
+  const verify = new Promise(resolve => {
+    const req = http.get('http://127.0.0.1:18789/', res => resolve(true))
+    req.on('error', () => resolve(false))
+    req.setTimeout(3000, () => { req.destroy(); resolve(false) })
+  })
+
+  // 用同步方式等验证（node 18+）
+  let ok = false
+  try {
+    const { execSync } = require('child_process')
+    execSync(
+      isWin
+        ? 'powershell -NonInteractive -Command "Invoke-WebRequest -Uri http://127.0.0.1:18789/ -TimeoutSec 3 -UseBasicParsing | Out-Null"'
+        : 'curl -sf http://127.0.0.1:18789/ -o /dev/null --max-time 3',
+      { stdio: 'ignore', timeout: 5000 }
+    )
+    ok = true
+  } catch {}
+
+  if (ok) {
+    console.log(chalk.green('  ✓ OpenClaw Gateway 已启动'))
+    console.log(chalk.cyan('  → 浏览器打开: http://127.0.0.1:18789/'))
+  } else {
+    console.log(chalk.yellow('  ⚠️  Gateway 启动中，请稍等 10 秒后访问:'))
+    console.log(chalk.cyan('  → http://127.0.0.1:18789/'))
+    console.log(chalk.gray('  如仍无法访问，请手动运行: openclaw gateway start'))
+  }
 }
