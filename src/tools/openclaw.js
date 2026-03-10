@@ -61,10 +61,19 @@ module.exports = {
     const chalk = require('chalk')
     console.log(chalk.gray('\n  ⚙️  正在配置 OpenClaw...'))
 
-    // 1. 删除旧配置，确保 onboard 会重新写入
+    // 1. 先停旧 gateway（必须在 onboard 之前，否则 hot-reload 会覆盖新 token）
+    npx('gateway', 'stop')
+    // Windows 额外 kill 残留进程
+    if (isWin) {
+      try { execSync('taskkill /F /IM node.exe /FI "WINDOWTITLE eq OpenClaw*" 2>nul', { shell: true, stdio: 'ignore' }) } catch {}
+    }
+    // 等 500ms 让端口释放
+    const t0 = Date.now(); while (Date.now() - t0 < 500) {}
+
+    // 2. 删除旧配置，确保 onboard 会重新写入
     try { fs.unlinkSync(CONFIG_FILE) } catch {}
 
-    // 2. 用 openclaw 官方 onboard 命令写入正确配置
+    // 3. 用 openclaw 官方 onboard 命令写入正确配置
     //    这会生成完整的 models.providers.custom-api-holysheep-ai 配置
     console.log(chalk.gray('  → 写入配置...'))
     const result = npx(
@@ -85,10 +94,7 @@ module.exports = {
       _writeFallbackConfig(apiKey, baseUrl)
     }
 
-    // 3. 先停旧 gateway，让新配置的 token 生效
-    npx('gateway', 'stop')
-
-    // 4. 读取新 token
+    // 4. 读取新 token（onboard 已写入，gateway 已停止，token 稳定）
     let token = ''
     try {
       token = readConfig()?.gateway?.auth?.token || ''
