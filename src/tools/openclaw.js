@@ -136,13 +136,11 @@ module.exports = {
  */
 function _startGateway() {
   if (isWin) {
-    // Windows: 弹出新 cmd 窗口运行 gateway（最可靠，进程真实存在）
-    // 窗口标题设为 "OpenClaw Gateway" 方便用户识别
-    spawnSync('cmd', ['/c', 'start', '"OpenClaw Gateway"', 'cmd', '/k', 'npx openclaw gateway --port 18789'], {
-      shell: false,
+    // Windows: 用 shell:true + start 弹出新窗口运行 gateway
+    spawnSync('cmd /c start cmd /k "npx openclaw gateway --port 18789"', [], {
+      shell: true,
       timeout: 5000,
       stdio: 'ignore',
-      detached: true,
     })
   } else {
     const child = spawn('openclaw', ['gateway', '--port', '18789'], {
