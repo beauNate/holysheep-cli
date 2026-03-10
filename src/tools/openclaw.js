@@ -136,11 +136,12 @@ module.exports = {
  */
 function _startGateway() {
   if (isWin) {
-    // 用 Start-Process 开一个后台 powershell 窗口运行 npx openclaw gateway
-    spawnSync('powershell', [
-      '-NonInteractive', '-Command',
-      `Start-Process -FilePath powershell -ArgumentList @('-NonInteractive','-WindowStyle','Hidden','-Command','npx openclaw gateway --port 18789') -WindowStyle Hidden -PassThru | Out-Null`
-    ], { shell: false, timeout: 10000, stdio: 'ignore' })
+    // Windows: 开一个新的最小化 cmd 窗口运行 gateway（不隐藏，否则用户看不到）
+    // 用 start 命令开新窗口，这样主进程可以继续
+    spawnSync('cmd', [
+      '/c', 'start', '"OpenClaw Gateway"', '/min',
+      'cmd', '/k', 'npx openclaw gateway --port 18789'
+    ], { shell: false, timeout: 5000, stdio: 'ignore' })
   } else {
     const child = spawn('openclaw', ['gateway', '--port', '18789'], {
       detached: true,
