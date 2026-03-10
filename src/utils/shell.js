@@ -41,25 +41,30 @@ function removeHsBlock(content) {
   return content.replace(re, '')
 }
 
-function buildEnvBlock(envVars) {
+function buildEnvBlock(envVars, isFish = false) {
   const lines = [MARKER_START]
   for (const [k, v] of Object.entries(envVars)) {
-    lines.push(`export ${k}="${v}"`)
+    // fish shell 用 set -gx，其他 shell 用 export
+    lines.push(isFish ? `set -gx ${k} "${v}"` : `export ${k}="${v}"`)
   }
   lines.push(MARKER_END)
   return '\n' + lines.join('\n') + '\n'
 }
 
 function writeEnvToShell(envVars) {
-  // Windows: 用 setx 写入用户级环境变量
+  // Windows: 用 setx 写入用户级环境变量（需重启终端生效）
   if (process.platform === 'win32') {
     const { execSync } = require('child_process')
     const written = []
     for (const [k, v] of Object.entries(envVars)) {
       try {
         execSync(`setx ${k} "${v}"`, { stdio: 'ignore' })
-        written.push(`[System Env] ${k}`)
+        written.push(`[系统环境变量] ${k}`)
       } catch {}
+    }
+    if (written.length > 0) {
+      const chalk = require('chalk')
+      console.log(chalk.yellow('\n  ⚠️  Windows 环境变量已写入，需要重启终端后生效'))
     }
     return written
   }
@@ -71,7 +76,8 @@ function writeEnvToShell(envVars) {
     let content = ''
     try { content = fs.readFileSync(file, 'utf8') } catch {}
     content = removeHsBlock(content)
-    content += buildEnvBlock(envVars)
+    const isFish = file.endsWith('config.fish')
+    content += buildEnvBlock(envVars, isFish)
     fs.writeFileSync(file, content, 'utf8')
     written.push(file)
   }

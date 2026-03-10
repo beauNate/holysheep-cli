@@ -59,7 +59,7 @@ module.exports = {
     if (!config.agents) config.agents = {}
     if (!config.agents.defaults) config.agents.defaults = {}
     if (!config.agents.defaults.model) {
-      config.agents.defaults.model = { primary: 'anthropic/claude-sonnet-4-5' }
+      config.agents.defaults.model = { primary: 'anthropic/claude-sonnet-4-5-20250929' }
     }
 
     // 同时注册一个 holysheep 自定义 provider（支持所有模型）
@@ -71,10 +71,12 @@ module.exports = {
       apiKey,
       api: 'openai-completions',
       models: [
-        { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5 (HolySheep)' },
-        { id: 'claude-opus-4-5',   name: 'Claude Opus 4.5 (HolySheep)'   },
-        { id: 'gpt-5.4',           name: 'GPT-5.4 (HolySheep)'           },
-        { id: 'gpt-5',             name: 'GPT-5 (HolySheep)'             },
+        { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5 (HolySheep)' },
+        { id: 'claude-sonnet-4-20250514',   name: 'Claude Sonnet 4 (HolySheep)'   },
+        { id: 'claude-opus-4-5-20251101',   name: 'Claude Opus 4.5 (HolySheep)'   },
+        { id: 'claude-opus-4-20250514',     name: 'Claude Opus 4 (HolySheep)'     },
+        { id: 'gpt-4o',                     name: 'GPT-4o (HolySheep)'            },
+        { id: 'gemini-2.5-pro',             name: 'Gemini 2.5 Pro (HolySheep)'    },
       ],
     }
 
