@@ -112,24 +112,18 @@ module.exports = {
     const authProfilePath = path.join(OPENCLAW_DIR, 'agents', 'main', 'agent', 'auth-profiles.json')
     try { fs.unlinkSync(authProfilePath) } catch {}
 
-    // 2. 用 openclaw 官方命令写入 auth（让 openclaw 自己生成正确格式）
-    //    --anthropic-api-key 直接写入 auth-profiles.json
-    console.log(chalk.gray('  → 写入 API Key...'))
-    const authResult = npx(
+    // 2. 写配置文件（gateway + env）
+    writeCorrectConfig(apiKey, baseUrlAnthropicNoV1)
+
+    // 3. 用 openclaw onboard --anthropic-api-key 让 openclaw 自己写 auth-profiles.json
+    console.log(chalk.gray('  → 写入认证信息...'))
+    npx(
       'onboard',
       '--non-interactive',
       '--anthropic-api-key', apiKey,
-      '--anthropic-base-url', baseUrlAnthropicNoV1,
-      '--skip-gateway',
-      '--skip-channels',
-      '--skip-daemon',
     )
 
-    // 不管 onboard 结果如何，继续写 gateway config
-    // 3. 写入正确格式配置（gateway 部分）
-    writeCorrectConfig(apiKey, baseUrlAnthropicNoV1)
-
-    // 4. doctor --fix 修复任何兼容性问题
+    // 4. doctor --fix
     npx('doctor', '--fix')
 
     // 读取写入的 token（用于生成带 token 的直接访问 URL）
