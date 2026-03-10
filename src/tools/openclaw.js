@@ -101,11 +101,8 @@ module.exports = {
       _writeFallbackConfig(apiKey, baseUrl)
     }
 
-    // 4. 读取新 token（onboard 已写入，gateway 已停止，token 稳定）
-    let token = ''
-    try {
-      token = readConfig()?.gateway?.auth?.token || ''
-    } catch {}
+    // 4. 关闭 gateway token 认证（直接打开浏览器无需 token）
+    _disableGatewayAuth()
 
     // 5. 启动 Gateway
     console.log(chalk.gray('  → 正在启动 Gateway...'))
@@ -117,10 +114,8 @@ module.exports = {
       console.log(chalk.yellow('  ⚠️  Gateway 启动中，稍等几秒后刷新浏览器'))
     }
 
-    const dashUrl = token
-      ? `http://127.0.0.1:18789/?token=${token}`
-      : 'http://127.0.0.1:18789/'
-    console.log(chalk.cyan('\n  → 浏览器打开（含 token，直接可用）:'))
+    const dashUrl = 'http://127.0.0.1:18789/'
+    console.log(chalk.cyan('\n  → 浏览器打开（无需 token）:'))
     console.log(chalk.bold.cyan(`     ${dashUrl}`))
 
     return { file: CONFIG_FILE, hot: false }
@@ -134,10 +129,6 @@ module.exports = {
   hint: 'Gateway 已启动，打开浏览器即可使用',
   launchCmd: null,
   get launchNote() {
-    try {
-      const token = readConfig()?.gateway?.auth?.token
-      if (token) return `🌐 复制此链接到浏览器（含 token）:\n       http://127.0.0.1:18789/?token=${token}`
-    } catch {}
     return '🌐 打开浏览器: http://127.0.0.1:18789/'
   },
   installCmd: 'npm install -g openclaw@latest',
@@ -146,12 +137,10 @@ module.exports = {
 
 /** onboard 失败时的备用配置（基于实测的正确格式） */
 function _writeFallbackConfig(apiKey, baseUrl) {
-  const { randomBytes } = require('crypto')
   fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
 
   const hostname = new URL(baseUrl).hostname.replace(/\./g, '-')
   const providerName = `custom-api-${hostname}`
-  const token = randomBytes(24).toString('hex')
 
   const config = {
     models: {
@@ -181,11 +170,18 @@ function _writeFallbackConfig(apiKey, baseUrl) {
       mode: 'local',
       port: 18789,
       bind: 'loopback',
-      auth: { mode: 'token', token },
+      auth: { mode: 'none' },   // 无需 token，本地访问直接打开
     }
   }
 
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8')
+}
+
+/** 用 openclaw config set 把 gateway auth 改成 none */
+function _disableGatewayAuth() {
+  try {
+    npx('config', 'set', 'gateway.auth.mode', 'none')
+  } catch {}
 }
 
 /** 启动 Gateway 后台进程 */
