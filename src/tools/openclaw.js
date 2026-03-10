@@ -118,7 +118,15 @@ module.exports = {
   id:   'openclaw',
 
   checkInstalled() {
-    return require('../utils/which').commandExists('openclaw')
+    if (require('../utils/which').commandExists('openclaw')) return true
+    // Windows PATH 未刷新时，用 npx 探测
+    if (process.platform === 'win32') {
+      try {
+        require('child_process').execSync('npx openclaw --version', { stdio: 'ignore', timeout: 10000 })
+        return true
+      } catch {}
+    }
+    return false
   },
 
   isConfigured() {
@@ -162,7 +170,12 @@ module.exports = {
   getConfigPath() { return CONFIG_FILE },
   hint:      'Gateway 已自动在后台启动，打开浏览器即可使用',
   launchCmd:  null,
-  launchNote: '🌐 打开浏览器访问 http://127.0.0.1:18789/',
+  get launchNote() {
+    const isWin = process.platform === 'win32'
+    return isWin
+      ? '🌐 打开浏览器访问 http://127.0.0.1:18789/\n    如无法访问请运行: npx openclaw gateway start'
+      : '🌐 打开浏览器访问 http://127.0.0.1:18789/'
+  },
   installCmd: 'npm install -g openclaw@latest',
   docsUrl:    'https://docs.openclaw.ai',
 }
@@ -179,7 +192,8 @@ module.exports = {
 function _initAndStartGateway() {
   const chalk = require('chalk')
   const isWin = process.platform === 'win32'
-  const bin   = 'openclaw'
+  // Windows 刚装完 npm 包，PATH 未刷新，用 npx 兜底
+  const bin   = isWin ? 'npx openclaw' : 'openclaw'
 
   console.log(chalk.gray('\n  ⚙️  正在启动 OpenClaw Gateway...'))
 
@@ -212,10 +226,10 @@ function _initAndStartGateway() {
   // Step 3: fallback — 直接后台运行进程
   console.log(chalk.gray('  → 以守护进程模式启动...'))
   if (isWin) {
-    // Windows: PowerShell Start-Process 后台运行，不弹窗
+    // Windows: PowerShell Start-Process 后台运行（用 npx 兜底 PATH 未刷新）
     spawnSync('powershell', [
       '-NonInteractive', '-WindowStyle', 'Hidden', '-Command',
-      `Start-Process -FilePath "openclaw" -ArgumentList "gateway","--port","18789" -WindowStyle Hidden`
+      `Start-Process -FilePath "npx" -ArgumentList "openclaw","gateway","--port","18789" -WindowStyle Hidden`
     ], { shell: false, timeout: 5000, stdio: 'ignore' })
   } else {
     const { spawn } = require('child_process')
