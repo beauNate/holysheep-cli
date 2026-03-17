@@ -72,7 +72,8 @@ async function setup(options) {
 
   if (!apiKey) {
     console.log(chalk.yellow('需要 API Key 才能配置工具。'))
-    console.log(chalk.cyan(`还没有账号？前往注册：${SHOP_URL}`))
+    console.log(chalk.cyan(`👉 免费注册获取 Key：${SHOP_URL}/register`))
+    console.log(chalk.gray(`   （¥10 起充，按量计费，支持微信/支付宝）`))
     console.log(chalk.gray(`提示：可先运行 ${chalk.cyan('hs login')} 登录并保存 Key，之后 setup 将自动读取。`))
     if (process.platform === 'win32') {
       console.log(chalk.gray(`  ⚠️  Windows 用户：如果 ${chalk.cyan('hs')} 命令找不到，请用以下方式运行：`))
