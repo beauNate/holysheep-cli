@@ -7,6 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/@simonyea/holysheep-cli?color=orange&label=npm)](https://www.npmjs.com/package/@simonyea/holysheep-cli)
 [![npm downloads](https://img.shields.io/npm/dm/@simonyea/holysheep-cli?color=blue)](https://www.npmjs.com/package/@simonyea/holysheep-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Register](https://img.shields.io/badge/🔑_Get_API_Key-holysheep.ai-brightgreen)](https://holysheep.ai/register)
 
 <br/>
 
@@ -45,6 +46,8 @@ Instead of manually editing config files for each tool, run one command and you'
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google protocol only | ❌ Not supported |
 
 ### Quick Start
+
+> 🔑 **First, get your free API Key** → [**holysheep.ai/register**](https://holysheep.ai/register) (free signup, pay-as-you-go from ¥10)
 
 ```bash
 npx @simonyea/holysheep-cli@latest setup
@@ -118,6 +121,8 @@ npx openclaw gateway --port 18789
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ❌ 不支持 | 仅支持 Google 官方协议 |
 
 ### 快速开始
+
+> 🔑 **第一步：注册获取 API Key** → [**holysheep.ai/register**](https://holysheep.ai/register)（免费注册，¥10 起充，按量计费）
 
 ```bash
 npx @simonyea/holysheep-cli@latest setup
