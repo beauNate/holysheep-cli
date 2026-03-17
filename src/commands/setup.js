@@ -73,6 +73,7 @@ async function setup(options) {
   if (!apiKey) {
     console.log(chalk.yellow('需要 API Key 才能配置工具。'))
     console.log(chalk.cyan(`👉 免费注册获取 Key：${SHOP_URL}/register`))
+    console.log(chalk.gray(`   支持微信/支付宝充值，按量计费`))
     console.log(chalk.gray(`   （¥10 起充，按量计费，支持微信/支付宝）`))
     console.log(chalk.gray(`提示：可先运行 ${chalk.cyan('hs login')} 登录并保存 Key，之后 setup 将自动读取。`))
     if (process.platform === 'win32') {
@@ -315,6 +316,13 @@ async function setup(options) {
   console.log(chalk.gray('如需切换其他工具，运行: hs setup'))
   console.log(chalk.gray('查看余额: hs balance'))
   console.log(chalk.gray('检查配置: hs doctor'))
+  console.log()
+
+  // 注册引导 banner
+  console.log(chalk.cyan('╔══════════════════════════════════════════════════╗'))
+  console.log(chalk.cyan('║') + chalk.bold('  🎁  还没有 Key？免费注册即可使用              ') + chalk.cyan('║'))
+  console.log(chalk.cyan('║') + chalk.green('  👉  https://holysheep.ai/register             ') + chalk.cyan('║'))
+  console.log(chalk.cyan('╚══════════════════════════════════════════════════╝'))
   console.log()
 }
 
