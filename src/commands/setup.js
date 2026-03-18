@@ -320,8 +320,9 @@ async function setup(options) {
 
   // 注册引导 banner
   console.log(chalk.cyan('╔══════════════════════════════════════════════════╗'))
-  console.log(chalk.cyan('║') + chalk.bold('  🎁  还没有 Key？免费注册即可使用              ') + chalk.cyan('║'))
+  console.log(chalk.cyan('║') + chalk.bold('  🎁  还没有 Key？立即注册即可使用！            ') + chalk.cyan('║'))
   console.log(chalk.cyan('║') + chalk.green('  👉  https://holysheep.ai/register             ') + chalk.cyan('║'))
+  console.log(chalk.cyan('║') + chalk.yellow('  💳 支持微信 / 支付宝，无需国际信用卡！    ') + chalk.cyan('║'))
   console.log(chalk.cyan('╚══════════════════════════════════════════════════╝'))
   console.log()
 }

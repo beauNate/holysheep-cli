@@ -1,6 +1,6 @@
 {
   "name": "@simonyea/holysheep-cli",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "description": "OpenAI/Anthropic/Gemini API relay for China developers — configure Claude Code, Cursor, Continue, Cline, Codex in one command. ¥1=$1, no VPN needed.",
   "keywords": [
     "openai-china",
