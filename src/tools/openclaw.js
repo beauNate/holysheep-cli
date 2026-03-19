@@ -74,34 +74,31 @@ function firstLine(text) {
 }
 
 function getOpenClawVersion(preferNpx = false) {
-  const result = runOpenClaw(['--version'], { preferNpx, timeout: 15000 })
+  const result = runOpenClaw(['--version'], { preferNpx, timeout: preferNpx ? 60000 : 15000 })
   if (result.status !== 0) return null
   return firstLine(result.stdout)
 }
 
 function detectRuntime() {
   const preferNpx = getPreferredRuntime()
-  const version = getOpenClawVersion(preferNpx)
+  const preferredRunner = getRunner(preferNpx)
 
-  if (version) {
-    const runner = getRunner(preferNpx)
+  if (preferredRunner) {
     return {
       available: true,
-      via: runner?.via || (preferNpx ? 'npx' : 'binary'),
-      command: runner?.label || (preferNpx ? 'npx openclaw' : 'openclaw'),
-      version,
+      via: preferredRunner.via,
+      command: preferredRunner.label,
+      version: getOpenClawVersion(preferNpx),
     }
   }
 
-  if (!preferNpx && hasNpx()) {
-    const fallbackVersion = getOpenClawVersion(true)
-    if (fallbackVersion) {
-      return {
-        available: true,
-        via: 'npx',
-        command: 'npx openclaw',
-        version: fallbackVersion,
-      }
+  const fallbackRunner = getRunner(true)
+  if (fallbackRunner) {
+    return {
+      available: true,
+      via: fallbackRunner.via,
+      command: fallbackRunner.label,
+      version: getOpenClawVersion(true),
     }
   }
 
