@@ -1,8 +1,8 @@
 /**
  * OpenClaw 适配器 (v2 — 基于实测的正确配置格式)
  *
- * 正确方案：写入 HolySheep 的 OpenAI + Anthropic 双 provider，
- * 默认模型固定为 GPT-5.4，同时保留 Claude 模型供 /model 切换。
+ * 正确方案：写入 HolySheep 的 OpenAI + Anthropic + MiniMax provider，
+ * 默认模型固定为 GPT-5.4，同时保留 Claude / MiniMax 模型供 /model 切换。
  */
 const fs = require('fs')
 const path = require('path')
@@ -17,9 +17,21 @@ const DEFAULT_GATEWAY_PORT = 18789
 const MAX_PORT_SCAN = 20
 const OPENCLAW_DEFAULT_MODEL = 'gpt-5.4'
 const OPENCLAW_DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6'
+const OPENCLAW_DEFAULT_MINIMAX_MODEL = 'MiniMax-M2.7-highspeed'
+const OPENCLAW_ROUTING_REGRESSION_VERSION = /^2026\.3\.13(?:\D|$)/
+
+function getOpenClawBinaryCandidates() {
+  return isWin ? ['openclaw.cmd', 'openclaw'] : ['openclaw']
+}
+
+function getBinaryRunner() {
+  return isWin
+    ? { cmd: 'openclaw.cmd', argsPrefix: [], shell: true, label: 'openclaw', via: 'binary' }
+    : { cmd: 'openclaw', argsPrefix: [], shell: false, label: 'openclaw', via: 'binary' }
+}
 
 function hasOpenClawBinary() {
-  return commandExists('openclaw')
+  return getOpenClawBinaryCandidates().some((cmd) => commandExists(cmd))
 }
 
 function hasNpx() {
@@ -27,16 +39,39 @@ function hasNpx() {
 }
 
 function getRunner(preferNpx = false) {
+  const binaryRunner = hasOpenClawBinary() ? getBinaryRunner() : null
+
   if (!preferNpx && hasOpenClawBinary()) {
-    return { cmd: 'openclaw', argsPrefix: [], shell: false, label: 'openclaw', via: 'binary' }
+    return binaryRunner
   }
   if (hasNpx()) {
     return { cmd: 'npx', argsPrefix: ['openclaw'], shell: isWin, label: 'npx openclaw', via: 'npx' }
   }
-  if (hasOpenClawBinary()) {
-    return { cmd: 'openclaw', argsPrefix: [], shell: false, label: 'openclaw', via: 'binary' }
+  if (binaryRunner) {
+    return binaryRunner
   }
   return null
+}
+
+function runWithRunner(runner, args, opts = {}) {
+  return spawnSync(runner.cmd, [...runner.argsPrefix, ...args], {
+    shell: runner.shell,
+    timeout: opts.timeout || 30000,
+    stdio: opts.stdio || 'pipe',
+    encoding: 'utf8',
+  })
+}
+
+function normalizeVersionOutput(text) {
+  return firstLine(text).replace(/^openclaw\s+/i, '').trim()
+}
+
+function probeRunner(runner, timeout) {
+  const result = runWithRunner(runner, ['--version'], { timeout })
+  if (result.error || result.status !== 0) return null
+
+  const version = normalizeVersionOutput(result.stdout || result.stderr || '')
+  return version || null
 }
 
 /** 运行 openclaw CLI（优先全局命令，可切换到 npx 回退） */
@@ -46,12 +81,7 @@ function runOpenClaw(args, opts = {}) {
     return { status: 1, stdout: '', stderr: 'OpenClaw CLI not found' }
   }
 
-  return spawnSync(runner.cmd, [...runner.argsPrefix, ...args], {
-    shell: runner.shell,
-    timeout: opts.timeout || 30000,
-    stdio: opts.stdio || 'pipe',
-    encoding: 'utf8',
-  })
+  return runWithRunner(runner, args, opts)
 }
 
 function spawnOpenClaw(args, opts = {}) {
@@ -74,35 +104,66 @@ function firstLine(text) {
 }
 
 function getOpenClawVersion(preferNpx = false) {
-  const result = runOpenClaw(['--version'], { preferNpx, timeout: preferNpx ? 60000 : 15000 })
-  if (result.status !== 0) return null
-  return firstLine(result.stdout)
+  const runner = getRunner(preferNpx)
+  if (!runner) return null
+  return probeRunner(runner, preferNpx ? 60000 : 15000)
 }
 
 function detectRuntime() {
   const preferNpx = getPreferredRuntime()
-  const preferredRunner = getRunner(preferNpx)
+  const runnerOrder = preferNpx ? [getRunner(true), getRunner(false)] : [getRunner(false), getRunner(true)]
+  const seen = new Set()
 
-  if (preferredRunner) {
-    return {
-      available: true,
-      via: preferredRunner.via,
-      command: preferredRunner.label,
-      version: getOpenClawVersion(preferNpx),
+  for (const runner of runnerOrder) {
+    if (!runner) continue
+    const key = `${runner.via}:${runner.cmd}:${runner.argsPrefix.join(' ')}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const version = probeRunner(runner, runner.via === 'npx' ? 60000 : 15000)
+    if (version) {
+      return {
+        available: true,
+        via: runner.via,
+        command: runner.label,
+        version,
+      }
     }
   }
 
-  const fallbackRunner = getRunner(true)
+  const fallbackRunner = getRunner(preferNpx)
   if (fallbackRunner) {
     return {
-      available: true,
+      available: false,
       via: fallbackRunner.via,
       command: fallbackRunner.label,
-      version: getOpenClawVersion(true),
+      version: null,
     }
   }
 
   return { available: false, via: null, command: null, version: null }
+}
+
+function isRoutingRegressionVersion(version) {
+  return OPENCLAW_ROUTING_REGRESSION_VERSION.test(String(version || '').trim())
+}
+
+function sanitizeSelectedModelsForRuntime(selectedModels, runtimeVersion) {
+  if (!isRoutingRegressionVersion(runtimeVersion)) {
+    return { models: selectedModels, warning: '' }
+  }
+
+  const originalModels = Array.isArray(selectedModels) ? selectedModels : []
+  const filteredModels = originalModels.filter((model) => !model.startsWith('MiniMax-'))
+
+  if (filteredModels.length === originalModels.length) {
+    return { models: selectedModels, warning: '' }
+  }
+
+  return {
+    models: filteredModels,
+    warning: '当前 OpenClaw 2026.3.13 存在 provider 路由回归，已暂时跳过 MiniMax 模型，避免 /model 和网页切换时报 model not allowed。升级 OpenClaw 后可重新运行 hs setup 恢复。',
+  }
 }
 
 function readConfig() {
@@ -189,6 +250,11 @@ function getLaunchCommand(port = getConfiguredGatewayPort()) {
   return `${runtime} gateway --port ${port}`
 }
 
+function getDashboardCommand() {
+  const runtime = module.exports._lastRuntimeCommand || (hasOpenClawBinary() ? 'openclaw' : 'npx openclaw')
+  return `${runtime} dashboard --no-open`
+}
+
 function buildProviderName(baseUrl, prefix) {
   const hostname = new URL(baseUrl).hostname.replace(/\./g, '-')
   return `${prefix}-${hostname}`
@@ -208,7 +274,7 @@ function buildModelEntry(id) {
 function buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModels) {
   const requestedModels = Array.isArray(selectedModels) && selectedModels.length > 0
     ? selectedModels
-    : [OPENCLAW_DEFAULT_MODEL, OPENCLAW_DEFAULT_CLAUDE_MODEL]
+    : [OPENCLAW_DEFAULT_MODEL, OPENCLAW_DEFAULT_CLAUDE_MODEL, OPENCLAW_DEFAULT_MINIMAX_MODEL]
 
   const openaiModels = requestedModels.filter((model) => model.startsWith('gpt-'))
   if (!openaiModels.includes(OPENCLAW_DEFAULT_MODEL)) {
@@ -220,8 +286,14 @@ function buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModel
     claudeModels.push(OPENCLAW_DEFAULT_CLAUDE_MODEL)
   }
 
+   const minimaxModels = requestedModels.filter((model) => model.startsWith('MiniMax-'))
+   if (requestedModels.includes(OPENCLAW_DEFAULT_MINIMAX_MODEL) && !minimaxModels.includes(OPENCLAW_DEFAULT_MINIMAX_MODEL)) {
+     minimaxModels.unshift(OPENCLAW_DEFAULT_MINIMAX_MODEL)
+   }
+
   const openaiProviderName = buildProviderName(baseUrlOpenAI, 'custom-openai')
   const anthropicProviderName = buildProviderName(baseUrlAnthropic, 'custom-anthropic')
+  const minimaxProviderName = buildProviderName(`${baseUrlAnthropic.replace(/\/+$/, '')}/minimax`, 'custom-anthropic')
 
   const providers = {
     [openaiProviderName]: {
@@ -238,9 +310,19 @@ function buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModel
     },
   }
 
+  if (minimaxModels.length > 0) {
+    providers[minimaxProviderName] = {
+      baseUrl: `${baseUrlAnthropic.replace(/\/+$/, '')}/minimax`,
+      apiKey,
+      api: 'anthropic-messages',
+      models: minimaxModels.map(buildModelEntry),
+    }
+  }
+
   const managedModelRefs = [
     ...openaiModels.map((id) => `${openaiProviderName}/${id}`),
     ...claudeModels.map((id) => `${anthropicProviderName}/${id}`),
+    ...minimaxModels.map((id) => `${minimaxProviderName}/${id}`),
   ]
 
   return {
@@ -362,6 +444,18 @@ function _startGateway(port, preferNpx = false, preferService = true) {
   return false
 }
 
+function getDashboardUrl(port, preferNpx = false) {
+  const result = runOpenClaw(['dashboard', '--no-open'], {
+    preferNpx,
+    timeout: preferNpx ? 60000 : 20000,
+  })
+  if (result.status === 0) {
+    const match = String(result.stdout || '').match(/Dashboard URL:\s*(\S+)/)
+    if (match) return match[1]
+  }
+  return `http://127.0.0.1:${port}/`
+}
+
 module.exports = {
   name: 'OpenClaw',
   id: 'openclaw',
@@ -390,6 +484,11 @@ module.exports = {
       throw new Error('未检测到 OpenClaw；请先全局安装，或确保 npx 可用')
     }
     this._lastRuntimeCommand = runtime.command
+
+    const sanitizedSelection = sanitizeSelectedModelsForRuntime(selectedModels, runtime.version)
+    if (sanitizedSelection.warning) {
+      console.log(chalk.yellow(`  ⚠️  ${sanitizedSelection.warning}`))
+    }
 
     runOpenClaw(['gateway', 'stop'], { preferNpx: runtime.via === 'npx' })
 
@@ -436,7 +535,7 @@ module.exports = {
       apiKey,
       baseUrlAnthropic,
       baseUrlOpenAI,
-      selectedModels,
+      sanitizedSelection.models,
       gatewayPort,
     )
 
@@ -452,10 +551,11 @@ module.exports = {
       console.log(chalk.yellow('  ⚠️  Gateway 启动中，稍等几秒后刷新浏览器'))
     }
 
-    const dashUrl = `http://127.0.0.1:${gatewayPort}/`
-    console.log(chalk.cyan('\n  → 浏览器打开（无需 token）:'))
+    const dashUrl = getDashboardUrl(gatewayPort, runtime.via === 'npx')
+    console.log(chalk.cyan('\n  → 浏览器打开（推荐使用此地址）:'))
     console.log(chalk.bold.cyan(`     ${dashUrl}`))
     console.log(chalk.gray(`     默认模型: ${OPENCLAW_DEFAULT_MODEL}`))
+    console.log(chalk.gray('     如在 Windows 上打开裸 http://127.0.0.1:PORT/ 仍报 Unauthorized，请使用上面的 dashboard 地址'))
 
     return {
       file: CONFIG_FILE,
@@ -477,11 +577,15 @@ module.exports = {
   get hint() {
     return `Gateway 已启动，默认模型为 ${getConfiguredPrimaryModel() || OPENCLAW_DEFAULT_MODEL}`
   },
-  get launchCmd() {
-    return getLaunchCommand(getConfiguredGatewayPort())
+  get launchSteps() {
+    const port = getConfiguredGatewayPort()
+    return [
+      { cmd: getLaunchCommand(port), note: '先启动 OpenClaw Gateway' },
+      { cmd: getDashboardCommand(), note: '再生成/打开可直接连接的 Dashboard 地址（推荐）' },
+    ]
   },
   get launchNote() {
-    return `🌐 打开浏览器: http://127.0.0.1:${getConfiguredGatewayPort()}/`
+    return `🌐 推荐运行 ${getDashboardCommand()}；Windows 上不要只打开裸 http://127.0.0.1:${getConfiguredGatewayPort()}/`
   },
   installCmd: 'npm install -g openclaw@latest',
   docsUrl: 'https://docs.openclaw.ai',

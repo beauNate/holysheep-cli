@@ -173,8 +173,3 @@ program
   })
 
 program.parse(process.argv)
-
-// 无参数时显示默认信息
-if (process.argv.length === 2) {
-  program.help()
-}

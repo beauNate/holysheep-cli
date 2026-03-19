@@ -25,6 +25,49 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.toml')
 // 保留 JSON 兼容性（老版本 TypeScript Codex 用）
 const CONFIG_FILE_JSON = path.join(CONFIG_DIR, 'config.json')
 
+function normalizeToml(content) {
+  return String(content || '').replace(/\r\n/g, '\n')
+}
+
+function cleanupToml(content) {
+  return normalizeToml(content)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function stripManagedTomlConfig(content) {
+  const lines = normalizeToml(content).split('\n')
+  const output = []
+  let currentSection = null
+  let skipHolySheepBlock = false
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    if (/^\[[^\]]+\]$/.test(trimmed)) {
+      if (trimmed === '[model_providers.holysheep]') {
+        currentSection = trimmed
+        skipHolySheepBlock = true
+        continue
+      }
+
+      currentSection = trimmed
+      skipHolySheepBlock = false
+    }
+
+    if (skipHolySheepBlock) continue
+
+    if (!currentSection) {
+      if (/^model\s*=\s*"[^"]*"\s*$/.test(trimmed)) continue
+      if (/^model_provider\s*=\s*"holysheep"\s*$/.test(trimmed)) continue
+    }
+
+    output.push(line)
+  }
+
+  return cleanupToml(output.join('\n'))
+}
+
 /**
  * 读取 TOML config（简单解析，不依赖 toml 库）
  */
@@ -55,14 +98,7 @@ function writeTomlConfig(apiKey, baseUrlOpenAI, model) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true })
   }
 
-  let content = readTomlConfig()
-
-  // 移除旧的 holysheep 相关配置
-  content = content
-    .replace(/\nmodel\s*=\s*"[^"]*"\n/g, '\n')
-    .replace(/\nmodel_provider\s*=\s*"holysheep"\n/g, '\n')
-    .replace(/\[model_providers\.holysheep\][^\[]*(\[|$)/gs, (m, end) => end === '[' ? '[' : '')
-    .trim()
+  const content = stripManagedTomlConfig(readTomlConfig())
 
   // 在开头插入 holysheep 配置
   const newConfig = [
@@ -76,9 +112,9 @@ function writeTomlConfig(apiKey, baseUrlOpenAI, model) {
     `base_url = "${baseUrlOpenAI}"`,
     `env_key = "OPENAI_API_KEY"`,
     '',
-  ].join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n'
+  ].join('\n')
 
-  fs.writeFileSync(CONFIG_FILE, newConfig, 'utf8')
+  fs.writeFileSync(CONFIG_FILE, cleanupToml(newConfig) + '\n', 'utf8')
 }
 
 /**
@@ -91,8 +127,15 @@ function writeJsonConfigIfNeeded(apiKey, baseUrlOpenAI, model) {
       jsonConfig = JSON.parse(fs.readFileSync(CONFIG_FILE_JSON, 'utf8'))
     }
     jsonConfig.model = model || 'gpt-5.4'
+    jsonConfig.model_provider = 'holysheep'
     jsonConfig.provider = 'holysheep'
+    if (!jsonConfig.model_providers) jsonConfig.model_providers = {}
     if (!jsonConfig.providers) jsonConfig.providers = {}
+    jsonConfig.model_providers.holysheep = {
+      name: 'HolySheep',
+      base_url: baseUrlOpenAI,
+      env_key: 'OPENAI_API_KEY',
+    }
     jsonConfig.providers.holysheep = {
       name: 'HolySheep',
       baseURL: baseUrlOpenAI,
@@ -132,22 +175,23 @@ module.exports = {
   reset() {
     // 清理 TOML
     if (fs.existsSync(CONFIG_FILE)) {
-      let content = readTomlConfig()
-      content = content
-        .replace(/^model\s*=\s*"[^"]*"\n/m, '')
-        .replace(/^model_provider\s*=\s*"holysheep"\n/m, '')
-        .replace(/\[model_providers\.holysheep\][^\[]*(\[|$)/gs, (m, end) => end === '[' ? '[' : '')
-        .trim() + '\n'
-      fs.writeFileSync(CONFIG_FILE, content, 'utf8')
+      const content = stripManagedTomlConfig(readTomlConfig())
+      fs.writeFileSync(CONFIG_FILE, (content ? content + '\n' : ''), 'utf8')
     }
     // 清理 JSON
     if (fs.existsSync(CONFIG_FILE_JSON)) {
       try {
         const c = JSON.parse(fs.readFileSync(CONFIG_FILE_JSON, 'utf8'))
+        if (c.model_provider === 'holysheep') {
+          delete c.model_provider
+        }
         if (c.provider === 'holysheep') {
           delete c.provider
-          delete c.providers?.holysheep
         }
+        delete c.model_providers?.holysheep
+        delete c.providers?.holysheep
+        if (c.model_providers && Object.keys(c.model_providers).length === 0) delete c.model_providers
+        if (c.providers && Object.keys(c.providers).length === 0) delete c.providers
         fs.writeFileSync(CONFIG_FILE_JSON, JSON.stringify(c, null, 2), 'utf8')
       } catch {}
     }
