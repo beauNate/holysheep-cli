@@ -452,7 +452,7 @@ module.exports = {
   id: 'openclaw',
 
   checkInstalled() {
-    return hasOpenClawBinary()
+    return detectRuntime().available
   },
 
   detectRuntime,
