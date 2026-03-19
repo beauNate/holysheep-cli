@@ -112,11 +112,12 @@ async function setup(options) {
 
   // Step 1.5: 选择要配置的模型
   const MODEL_CHOICES = [
-    { name: 'gpt-5.4             (GPT 5.4, 通用编码)',    value: 'gpt-5.4',                 checked: true },
-    { name: 'claude-sonnet-4-6   (Sonnet 4.6, 均衡推荐)', value: 'claude-sonnet-4-6',       checked: true },
-    { name: 'claude-opus-4-6     (Opus 4.6, 强力旗舰)',   value: 'claude-opus-4-6',         checked: true },
-    { name: 'MiniMax-M2.7-highspeed (高速经济版)',         value: 'MiniMax-M2.7-highspeed',  checked: true },
-    { name: 'claude-haiku-4-5    (Haiku 4.5, 轻快便宜)',  value: 'claude-haiku-4-5',        checked: true },
+    { name: 'gpt-5.4             (GPT 5.4, 通用编码)',          value: 'gpt-5.4',                    checked: true },
+    { name: 'gpt-5.3-codex-spark (GPT 5.3 Codex Spark, 编码)', value: 'gpt-5.3-codex-spark',        checked: true },
+    { name: 'claude-sonnet-4-6   (Sonnet 4.6, 均衡推荐)',       value: 'claude-sonnet-4-6',          checked: true },
+    { name: 'claude-opus-4-6     (Opus 4.6, 强力旗舰)',         value: 'claude-opus-4-6',            checked: true },
+    { name: 'MiniMax-M2.7-highspeed (高速经济版)',               value: 'MiniMax-M2.7-highspeed',     checked: true },
+    { name: 'claude-haiku-4-5    (Haiku 4.5, 轻快便宜)',        value: 'claude-haiku-4-5',           checked: true },
   ]
   const { selectedModels } = await inquirer.prompt([{
     type: 'checkbox',

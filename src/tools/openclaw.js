@@ -18,6 +18,7 @@ const DEFAULT_BRIDGE_PORT = 18788
 const DEFAULT_GATEWAY_PORT = 18789
 const MAX_PORT_SCAN = 40
 const OPENCLAW_DEFAULT_MODEL = 'gpt-5.4'
+const OPENCLAW_DEFAULT_CODEX_SPARK_MODEL = 'gpt-5.3-codex-spark'
 const OPENCLAW_DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6'
 const OPENCLAW_DEFAULT_MINIMAX_MODEL = 'MiniMax-M2.7-highspeed'
 const OPENCLAW_PROVIDER_NAME = 'holysheep'
@@ -312,7 +313,7 @@ function buildModelEntry(id) {
 function normalizeRequestedModels(selectedModels) {
   const requestedModels = Array.isArray(selectedModels) && selectedModels.length > 0
     ? [...selectedModels]
-    : [OPENCLAW_DEFAULT_MODEL, OPENCLAW_DEFAULT_CLAUDE_MODEL, OPENCLAW_DEFAULT_MINIMAX_MODEL]
+    : [OPENCLAW_DEFAULT_MODEL, OPENCLAW_DEFAULT_CODEX_SPARK_MODEL, OPENCLAW_DEFAULT_CLAUDE_MODEL, OPENCLAW_DEFAULT_MINIMAX_MODEL]
 
   if (!requestedModels.includes(OPENCLAW_DEFAULT_MODEL)) requestedModels.unshift(OPENCLAW_DEFAULT_MODEL)
   return Array.from(new Set(requestedModels))
