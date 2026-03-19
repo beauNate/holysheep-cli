@@ -154,6 +154,19 @@ program
     })
   })
 
+// ── openclaw-bridge ──────────────────────────────────────────────────────────
+program
+  .command('openclaw-bridge')
+  .description('启动 HolySheep 的 OpenClaw 本地桥接服务')
+  .option('--port <port>', '指定桥接服务端口')
+  .action((opts) => {
+    const { startBridge } = require('./tools/openclaw-bridge')
+    startBridge({
+      port: opts.port ? Number(opts.port) : null,
+      host: '127.0.0.1',
+    })
+  })
+
 // 默认：无命令时显示帮助 + 提示 setup
 program
   .action(() => {

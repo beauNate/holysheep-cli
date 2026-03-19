@@ -9,16 +9,18 @@ const path = require('path')
 const os = require('os')
 const { spawnSync, spawn, execSync } = require('child_process')
 const { commandExists } = require('../utils/which')
+const { BRIDGE_CONFIG_FILE } = require('./openclaw-bridge')
 
 const OPENCLAW_DIR = path.join(os.homedir(), '.openclaw')
 const CONFIG_FILE = path.join(OPENCLAW_DIR, 'openclaw.json')
 const isWin = process.platform === 'win32'
+const DEFAULT_BRIDGE_PORT = 18788
 const DEFAULT_GATEWAY_PORT = 18789
-const MAX_PORT_SCAN = 20
+const MAX_PORT_SCAN = 40
 const OPENCLAW_DEFAULT_MODEL = 'gpt-5.4'
 const OPENCLAW_DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6'
 const OPENCLAW_DEFAULT_MINIMAX_MODEL = 'MiniMax-M2.7-highspeed'
-const OPENCLAW_ROUTING_REGRESSION_VERSION = /^2026\.3\.13(?:\D|$)/
+const OPENCLAW_PROVIDER_NAME = 'holysheep'
 
 function getOpenClawBinaryCandidates() {
   return isWin ? ['openclaw.cmd', 'openclaw'] : ['openclaw']
@@ -144,16 +146,67 @@ function detectRuntime() {
   return { available: false, via: null, command: null, version: null }
 }
 
-function isRoutingRegressionVersion(version) {
-  return OPENCLAW_ROUTING_REGRESSION_VERSION.test(String(version || '').trim())
+function readBridgeConfig() {
+  try {
+    if (fs.existsSync(BRIDGE_CONFIG_FILE)) {
+      return JSON.parse(fs.readFileSync(BRIDGE_CONFIG_FILE, 'utf8'))
+    }
+  } catch {}
+  return {}
 }
 
-function getRoutingRegressionWarning(runtimeVersion, minimaxModelRef) {
-  if (!isRoutingRegressionVersion(runtimeVersion) || !minimaxModelRef) {
-    return ''
+function writeBridgeConfig(data) {
+  fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
+  fs.writeFileSync(BRIDGE_CONFIG_FILE, JSON.stringify(data, null, 2), 'utf8')
+}
+
+function getConfiguredBridgePort(config = readBridgeConfig()) {
+  const port = Number(config?.port)
+  return Number.isInteger(port) && port > 0 ? port : DEFAULT_BRIDGE_PORT
+}
+
+function getBridgeBaseUrl(port = getConfiguredBridgePort()) {
+  return `http://127.0.0.1:${port}/v1`
+}
+
+function waitForBridge(port) {
+  for (let i = 0; i < 10; i++) {
+    const t0 = Date.now()
+    while (Date.now() - t0 < 500) {}
+
+    try {
+      execSync(
+        isWin
+          ? `powershell -NonInteractive -Command "try{(Invoke-WebRequest -Uri http://127.0.0.1:${port}/health -TimeoutSec 1 -UseBasicParsing).StatusCode}catch{exit 1}"`
+          : `curl -sf http://127.0.0.1:${port}/health -o /dev/null --max-time 1`,
+        { stdio: 'ignore', timeout: 3000 }
+      )
+      return true
+    } catch {}
   }
 
-  return `当前 OpenClaw 2026.3.13 存在 provider 路由回归，但 HolySheep 仍会保留 MiniMax 配置。若网页模型切换失败，请直接输入 /model ${minimaxModelRef}，或升级 OpenClaw 后再试。`
+  return false
+}
+
+function startBridge(port) {
+  if (waitForBridge(port)) return true
+
+  const scriptPath = path.join(__dirname, '..', 'index.js')
+  const child = spawn(process.execPath, [scriptPath, 'openclaw-bridge', '--port', String(port)], {
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
+  return waitForBridge(port)
+}
+
+function getBridgeCommand(port = getConfiguredBridgePort()) {
+  return `hs openclaw-bridge --port ${port}`
+}
+
+function pickPrimaryModel(primaryModel, selectedModels) {
+  const models = Array.isArray(selectedModels) ? selectedModels : []
+  return primaryModel || models[0] || OPENCLAW_DEFAULT_MODEL
 }
 
 function readConfig() {
@@ -245,11 +298,6 @@ function getDashboardCommand() {
   return `${runtime} dashboard --no-open`
 }
 
-function buildProviderName(baseUrl, prefix) {
-  const hostname = new URL(baseUrl).hostname.replace(/\./g, '-')
-  return `${prefix}-${hostname}`
-}
-
 function buildModelEntry(id) {
   return {
     id,
@@ -261,79 +309,51 @@ function buildModelEntry(id) {
   }
 }
 
-function buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModels) {
+function normalizeRequestedModels(selectedModels) {
   const requestedModels = Array.isArray(selectedModels) && selectedModels.length > 0
-    ? selectedModels
+    ? [...selectedModels]
     : [OPENCLAW_DEFAULT_MODEL, OPENCLAW_DEFAULT_CLAUDE_MODEL, OPENCLAW_DEFAULT_MINIMAX_MODEL]
 
-  const openaiModels = requestedModels.filter((model) => model.startsWith('gpt-'))
-  if (!openaiModels.includes(OPENCLAW_DEFAULT_MODEL)) {
-    openaiModels.unshift(OPENCLAW_DEFAULT_MODEL)
-  }
+  if (!requestedModels.includes(OPENCLAW_DEFAULT_MODEL)) requestedModels.unshift(OPENCLAW_DEFAULT_MODEL)
+  return Array.from(new Set(requestedModels))
+}
 
-  const claudeModels = requestedModels.filter((model) => model.startsWith('claude-'))
-  if (claudeModels.length === 0) {
-    claudeModels.push(OPENCLAW_DEFAULT_CLAUDE_MODEL)
-  }
-
-   const minimaxModels = requestedModels.filter((model) => model.startsWith('MiniMax-'))
-   if (requestedModels.includes(OPENCLAW_DEFAULT_MINIMAX_MODEL) && !minimaxModels.includes(OPENCLAW_DEFAULT_MINIMAX_MODEL)) {
-     minimaxModels.unshift(OPENCLAW_DEFAULT_MINIMAX_MODEL)
-   }
-
-  const openaiProviderName = buildProviderName(baseUrlOpenAI, 'custom-openai')
-  const anthropicProviderName = buildProviderName(baseUrlAnthropic, 'custom-anthropic')
-  const minimaxProviderName = buildProviderName(`${baseUrlAnthropic.replace(/\/+$/, '')}/minimax`, 'custom-minimax')
-
-  const providers = {
-    [openaiProviderName]: {
-      baseUrl: baseUrlOpenAI,
-      apiKey,
-      api: 'openai-completions',
-      models: openaiModels.map(buildModelEntry),
-    },
-    [anthropicProviderName]: {
-      baseUrl: baseUrlAnthropic,
-      apiKey,
-      api: 'anthropic-messages',
-      models: claudeModels.map(buildModelEntry),
-    },
-  }
-
-  if (minimaxModels.length > 0) {
-    providers[minimaxProviderName] = {
-      baseUrl: `${baseUrlAnthropic.replace(/\/+$/, '')}/minimax`,
-      apiKey,
-      api: 'anthropic-messages',
-      models: minimaxModels.map(buildModelEntry),
-    }
-  }
-
-  const managedModelRefs = [
-    ...openaiModels.map((id) => `${openaiProviderName}/${id}`),
-    ...claudeModels.map((id) => `${anthropicProviderName}/${id}`),
-    ...minimaxModels.map((id) => `${minimaxProviderName}/${id}`),
-  ]
+function buildManagedPlan(baseUrlBridge, primaryModel, selectedModels) {
+  const requestedModels = normalizeRequestedModels(selectedModels)
+  const managedModelRefs = requestedModels.map((model) => `${OPENCLAW_PROVIDER_NAME}/${model}`)
+  const fallbackPrimaryModel = pickPrimaryModel(primaryModel, requestedModels)
+  const primaryRef = managedModelRefs.includes(`${OPENCLAW_PROVIDER_NAME}/${fallbackPrimaryModel}`)
+    ? `${OPENCLAW_PROVIDER_NAME}/${fallbackPrimaryModel}`
+    : managedModelRefs[0] || `${OPENCLAW_PROVIDER_NAME}/${OPENCLAW_DEFAULT_MODEL}`
 
   return {
-    providers,
+    providers: {
+      [OPENCLAW_PROVIDER_NAME]: {
+        baseUrl: baseUrlBridge,
+        api: 'openai-completions',
+        models: requestedModels.map(buildModelEntry),
+      },
+    },
     managedModelRefs,
-    primaryRef: `${openaiProviderName}/${OPENCLAW_DEFAULT_MODEL}`,
-    minimaxRef: minimaxModels[0] ? `${minimaxProviderName}/${minimaxModels[0]}` : '',
+    models: requestedModels,
+    primaryRef,
   }
 }
 
 function isHolySheepProvider(provider) {
-  return typeof provider?.baseUrl === 'string' && provider.baseUrl.includes('api.holysheep.ai')
+  return typeof provider?.baseUrl === 'string' && (
+    provider.baseUrl.includes('api.holysheep.ai') ||
+    provider.baseUrl.includes('127.0.0.1')
+  )
 }
 
-function writeManagedConfig(baseConfig, apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModels, gatewayPort) {
+function writeManagedConfig(baseConfig, bridgeBaseUrl, primaryModel, selectedModels, gatewayPort) {
   fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
 
-  const plan = buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModels)
+  const plan = buildManagedPlan(bridgeBaseUrl, primaryModel, selectedModels)
   const existingProviders = baseConfig?.models?.providers || {}
   const managedProviderIds = Object.entries(existingProviders)
-    .filter(([, provider]) => isHolySheepProvider(provider))
+    .filter(([providerId, provider]) => providerId === OPENCLAW_PROVIDER_NAME || isHolySheepProvider(provider))
     .map(([providerId]) => providerId)
 
   const preservedProviders = Object.fromEntries(
@@ -462,11 +482,13 @@ module.exports = {
   },
 
   isConfigured() {
-    const cfg = JSON.stringify(readConfig())
-    return cfg.includes('holysheep.ai')
+    const cfg = readConfig()
+    const hasProvider = cfg?.models?.providers?.[OPENCLAW_PROVIDER_NAME]?.baseUrl?.includes('127.0.0.1')
+    const bridge = readBridgeConfig()
+    return Boolean(hasProvider && bridge?.apiKey)
   },
 
-  configure(apiKey, baseUrlAnthropic, baseUrlOpenAI, _primaryModel, selectedModels) {
+  configure(apiKey, baseUrlAnthropic, baseUrlOpenAI, primaryModel, selectedModels) {
     const chalk = require('chalk')
     console.log(chalk.gray('\n  ⚙️  正在配置 OpenClaw...'))
 
@@ -475,6 +497,27 @@ module.exports = {
       throw new Error('未检测到 OpenClaw；请先全局安装，或确保 npx 可用')
     }
     this._lastRuntimeCommand = runtime.command
+
+    const resolvedPrimaryModel = pickPrimaryModel(primaryModel, selectedModels)
+    const bridgePort = findAvailableGatewayPort(DEFAULT_BRIDGE_PORT)
+    if (!bridgePort) {
+      throw new Error(`找不到可用桥接端口（已检查 ${DEFAULT_BRIDGE_PORT}-${DEFAULT_BRIDGE_PORT + MAX_PORT_SCAN - 1}）`)
+    }
+    this._lastBridgePort = bridgePort
+
+    writeBridgeConfig({
+      port: bridgePort,
+      apiKey,
+      baseUrlAnthropic,
+      baseUrlOpenAI,
+      models: normalizeRequestedModels(selectedModels),
+    })
+
+    console.log(chalk.gray('  → 正在启动 HolySheep Bridge...'))
+    if (!startBridge(bridgePort)) {
+      throw new Error('HolySheep OpenClaw Bridge 启动失败')
+    }
+    const bridgeBaseUrl = getBridgeBaseUrl(bridgePort)
 
     runOpenClaw(['gateway', 'stop'], { preferNpx: runtime.via === 'npx' })
 
@@ -504,9 +547,9 @@ module.exports = {
       '--non-interactive',
       '--accept-risk',
       '--auth-choice', 'custom-api-key',
-      '--custom-base-url', baseUrlOpenAI,
+      '--custom-base-url', bridgeBaseUrl,
       '--custom-api-key', apiKey,
-      '--custom-model-id', OPENCLAW_DEFAULT_MODEL,
+      '--custom-model-id', resolvedPrimaryModel,
       '--custom-compatibility', 'openai',
       '--gateway-port', String(gatewayPort),
       '--install-daemon',
@@ -518,17 +561,11 @@ module.exports = {
 
     const plan = writeManagedConfig(
       result.status === 0 ? readConfig() : {},
-      apiKey,
-      baseUrlAnthropic,
-      baseUrlOpenAI,
+      bridgeBaseUrl,
+      resolvedPrimaryModel,
       selectedModels,
       gatewayPort,
     )
-
-    const routingRegressionWarning = getRoutingRegressionWarning(runtime.version, plan.minimaxRef)
-    if (routingRegressionWarning) {
-      console.log(chalk.yellow(`  ⚠️  ${routingRegressionWarning}`))
-    }
 
     _disableGatewayAuth(runtime.via === 'npx')
     const serviceReady = _installGatewayService(gatewayPort, runtime.via === 'npx')
@@ -545,7 +582,8 @@ module.exports = {
     const dashUrl = getDashboardUrl(gatewayPort, runtime.via === 'npx')
     console.log(chalk.cyan('\n  → 浏览器打开（推荐使用此地址）:'))
     console.log(chalk.bold.cyan(`     ${dashUrl}`))
-    console.log(chalk.gray(`     默认模型: ${OPENCLAW_DEFAULT_MODEL}`))
+    console.log(chalk.gray(`     Bridge 地址: ${bridgeBaseUrl}`))
+    console.log(chalk.gray(`     默认模型: ${plan.primaryRef || OPENCLAW_DEFAULT_MODEL}`))
     console.log(chalk.gray('     如在 Windows 上打开裸 http://127.0.0.1:PORT/ 仍报 Unauthorized，请使用上面的 dashboard 地址'))
 
     return {
@@ -559,24 +597,28 @@ module.exports = {
 
   reset() {
     try { fs.unlinkSync(CONFIG_FILE) } catch {}
+    try { fs.unlinkSync(BRIDGE_CONFIG_FILE) } catch {}
   },
 
   getConfigPath() { return CONFIG_FILE },
+  getBridgePort() { return getConfiguredBridgePort() },
   getGatewayPort() { return getConfiguredGatewayPort() },
   getPrimaryModel() { return getConfiguredPrimaryModel() },
   getPortListeners(port = getConfiguredGatewayPort()) { return listPortListeners(port) },
   get hint() {
-    return `Gateway 已启动，默认模型为 ${getConfiguredPrimaryModel() || OPENCLAW_DEFAULT_MODEL}`
+    return `Bridge + Gateway 已配置，默认模型为 ${getConfiguredPrimaryModel() || OPENCLAW_DEFAULT_MODEL}`
   },
   get launchSteps() {
+    const bridgePort = getConfiguredBridgePort()
     const port = getConfiguredGatewayPort()
     return [
-      { cmd: getLaunchCommand(port), note: '先启动 OpenClaw Gateway' },
+      { cmd: getBridgeCommand(bridgePort), note: '先启动 HolySheep OpenClaw Bridge' },
+      { cmd: getLaunchCommand(port), note: '再启动 OpenClaw Gateway' },
       { cmd: getDashboardCommand(), note: '再生成/打开可直接连接的 Dashboard 地址（推荐）' },
     ]
   },
   get launchNote() {
-    return `🌐 推荐运行 ${getDashboardCommand()}；Windows 上不要只打开裸 http://127.0.0.1:${getConfiguredGatewayPort()}/`
+    return `🌐 请先启动 Bridge，再启动 Gateway；最后运行 ${getDashboardCommand()}`
   },
   installCmd: 'npm install -g openclaw@latest',
   docsUrl: 'https://docs.openclaw.ai',
