@@ -96,6 +96,7 @@ function printCheck(ok, label, detail = '') {
 function printOpenClawDetails(tool, installState, nodeMajor) {
   const details = []
   const gatewayPort = typeof tool.getGatewayPort === 'function' ? tool.getGatewayPort() : 18789
+  const primaryModel = typeof tool.getPrimaryModel === 'function' ? tool.getPrimaryModel() : ''
   const listeners = typeof tool.getPortListeners === 'function' ? tool.getPortListeners(gatewayPort) : []
   const foreignListeners = listeners.filter((item) => !String(item.command || '').toLowerCase().includes('openclaw'))
 
@@ -111,6 +112,13 @@ function printOpenClawDetails(tool, installState, nodeMajor) {
       ? { level: 'ok', text: `OpenClaw Node 版本要求满足（当前 ${process.version}）` }
       : { level: 'warn', text: `OpenClaw 建议 Node.js >= 20（当前 ${process.version}）` }
   )
+
+  if (primaryModel) {
+    details.push({
+      level: 'info',
+      text: `当前默认模型：${primaryModel}`,
+    })
+  }
 
   if (foreignListeners.length) {
     const occupiedBy = foreignListeners

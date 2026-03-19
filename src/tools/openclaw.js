@@ -1,14 +1,8 @@
 /**
  * OpenClaw 适配器 (v2 — 基于实测的正确配置格式)
  *
- * 正确方案：custom-api-key provider，配置在 models.providers 里
- * provider name 自动生成为 "custom-api-{hostname}"
- * 模型引用格式: "custom-api-holysheep-ai/claude-sonnet-4-6"
- *
- * 必须的 onboard 参数:
- *   --accept-risk --auth-choice custom-api-key
- *   --custom-base-url --custom-api-key --custom-model-id --custom-compatibility anthropic
- *   --install-daemon
+ * 正确方案：写入 HolySheep 的 OpenAI + Anthropic 双 provider，
+ * 默认模型固定为 GPT-5.4，同时保留 Claude 模型供 /model 切换。
  */
 const fs = require('fs')
 const path = require('path')
@@ -21,6 +15,8 @@ const CONFIG_FILE = path.join(OPENCLAW_DIR, 'openclaw.json')
 const isWin = process.platform === 'win32'
 const DEFAULT_GATEWAY_PORT = 18789
 const MAX_PORT_SCAN = 20
+const OPENCLAW_DEFAULT_MODEL = 'gpt-5.4'
+const OPENCLAW_DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6'
 
 function hasOpenClawBinary() {
   return commandExists('openclaw')
@@ -132,6 +128,10 @@ function getConfiguredGatewayPort(config = readConfig()) {
   return Number.isInteger(port) && port > 0 ? port : DEFAULT_GATEWAY_PORT
 }
 
+function getConfiguredPrimaryModel(config = readConfig()) {
+  return config?.agents?.defaults?.model?.primary || ''
+}
+
 function isPortInUse(port) {
   try {
     if (isWin) {
@@ -192,63 +192,136 @@ function getLaunchCommand(port = getConfiguredGatewayPort()) {
   return `${runtime} gateway --port ${port}`
 }
 
-function _writeFallbackConfig(apiKey, baseUrl, selectedModels, primaryModel, gatewayPort) {
-  fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
-
+function buildProviderName(baseUrl, prefix) {
   const hostname = new URL(baseUrl).hostname.replace(/\./g, '-')
-  const providerName = `custom-api-${hostname}`
+  return `${prefix}-${hostname}`
+}
 
-  const claudeModels = (selectedModels || ['claude-sonnet-4-6'])
-    .filter((model) => model.startsWith('claude-'))
-  if (claudeModels.length === 0) claudeModels.push('claude-sonnet-4-6')
+function buildModelEntry(id) {
+  return {
+    id,
+    name: `${id} (HolySheep)`,
+    reasoning: false,
+    input: ['text'],
+    contextWindow: 200000,
+    maxTokens: id.startsWith('gpt-') ? 8192 : 16000,
+  }
+}
 
-  const primary = primaryModel || claudeModels[0]
+function buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModels) {
+  const requestedModels = Array.isArray(selectedModels) && selectedModels.length > 0
+    ? selectedModels
+    : [OPENCLAW_DEFAULT_MODEL, OPENCLAW_DEFAULT_CLAUDE_MODEL]
 
-  const config = {
-    models: {
-      mode: 'merge',
-      providers: {
-        [providerName]: {
-          baseUrl,
-          apiKey,
-          api: 'anthropic-messages',
-          models: claudeModels.map((id) => ({
-            id,
-            name: `${id} (HolySheep)`,
-            reasoning: false,
-            input: ['text'],
-            contextWindow: 200000,
-            maxTokens: 16000,
-          })),
-        },
-      },
+  const openaiModels = requestedModels.filter((model) => model.startsWith('gpt-'))
+  if (!openaiModels.includes(OPENCLAW_DEFAULT_MODEL)) {
+    openaiModels.unshift(OPENCLAW_DEFAULT_MODEL)
+  }
+
+  const claudeModels = requestedModels.filter((model) => model.startsWith('claude-'))
+  if (claudeModels.length === 0) {
+    claudeModels.push(OPENCLAW_DEFAULT_CLAUDE_MODEL)
+  }
+
+  const openaiProviderName = buildProviderName(baseUrlOpenAI, 'custom-openai')
+  const anthropicProviderName = buildProviderName(baseUrlAnthropic, 'custom-anthropic')
+
+  const providers = {
+    [openaiProviderName]: {
+      baseUrl: baseUrlOpenAI,
+      apiKey,
+      api: 'openai-completions',
+      models: openaiModels.map(buildModelEntry),
     },
-    agents: {
-      defaults: {
-        model: { primary: `${providerName}/${primary}` },
-      },
-    },
-    gateway: {
-      mode: 'local',
-      port: gatewayPort,
-      bind: 'loopback',
-      auth: { mode: 'none' },
+    [anthropicProviderName]: {
+      baseUrl: baseUrlAnthropic,
+      apiKey,
+      api: 'anthropic-messages',
+      models: claudeModels.map(buildModelEntry),
     },
   }
 
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8')
+  const managedModelRefs = [
+    ...openaiModels.map((id) => `${openaiProviderName}/${id}`),
+    ...claudeModels.map((id) => `${anthropicProviderName}/${id}`),
+  ]
+
+  return {
+    providers,
+    managedModelRefs,
+    primaryRef: `${openaiProviderName}/${OPENCLAW_DEFAULT_MODEL}`,
+  }
+}
+
+function isHolySheepProvider(provider) {
+  return typeof provider?.baseUrl === 'string' && provider.baseUrl.includes('api.holysheep.ai')
+}
+
+function writeManagedConfig(baseConfig, apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModels, gatewayPort) {
+  fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
+
+  const plan = buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModels)
+  const existingProviders = baseConfig?.models?.providers || {}
+  const managedProviderIds = Object.entries(existingProviders)
+    .filter(([, provider]) => isHolySheepProvider(provider))
+    .map(([providerId]) => providerId)
+
+  const preservedProviders = Object.fromEntries(
+    Object.entries(existingProviders).filter(([, provider]) => !isHolySheepProvider(provider))
+  )
+
+  const existingModelMap = baseConfig?.agents?.defaults?.models || {}
+  const preservedModelMap = Object.fromEntries(
+    Object.entries(existingModelMap).filter(([ref]) => {
+      return !managedProviderIds.some((providerId) => ref.startsWith(`${providerId}/`))
+    })
+  )
+
+  const managedModelMap = Object.fromEntries(plan.managedModelRefs.map((ref) => [ref, {}]))
+
+  const nextConfig = {
+    ...baseConfig,
+    models: {
+      ...(baseConfig.models || {}),
+      mode: 'merge',
+      providers: {
+        ...preservedProviders,
+        ...plan.providers,
+      },
+    },
+    agents: {
+      ...(baseConfig.agents || {}),
+      defaults: {
+        ...(baseConfig.agents?.defaults || {}),
+        model: {
+          ...(baseConfig.agents?.defaults?.model || {}),
+          primary: plan.primaryRef,
+        },
+        models: {
+          ...preservedModelMap,
+          ...managedModelMap,
+        },
+      },
+    },
+    gateway: {
+      ...(baseConfig.gateway || {}),
+      mode: 'local',
+      port: gatewayPort,
+      bind: 'loopback',
+      auth: {
+        ...(baseConfig.gateway?.auth || {}),
+        mode: 'none',
+      },
+    },
+  }
+
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(nextConfig, null, 2), 'utf8')
+  return plan
 }
 
 function _disableGatewayAuth(preferNpx = false) {
   try {
     runOpenClaw(['config', 'set', 'gateway.auth.mode', 'none'], { preferNpx })
-  } catch {}
-}
-
-function _setGatewayPort(port, preferNpx = false) {
-  try {
-    runOpenClaw(['config', 'set', 'gateway.port', String(port)], { preferNpx })
-    runOpenClaw(['config', 'set', 'gateway.bind', 'loopback'], { preferNpx })
   } catch {}
 }
 
@@ -311,7 +384,7 @@ module.exports = {
     return cfg.includes('holysheep.ai')
   },
 
-  configure(apiKey, baseUrl, _baseUrlOpenAI, primaryModel, selectedModels) {
+  configure(apiKey, baseUrlAnthropic, baseUrlOpenAI, _primaryModel, selectedModels) {
     const chalk = require('chalk')
     console.log(chalk.gray('\n  ⚙️  正在配置 OpenClaw...'))
 
@@ -349,19 +422,26 @@ module.exports = {
       '--non-interactive',
       '--accept-risk',
       '--auth-choice', 'custom-api-key',
-      '--custom-base-url', baseUrl,
+      '--custom-base-url', baseUrlOpenAI,
       '--custom-api-key', apiKey,
-      '--custom-model-id', primaryModel || 'claude-sonnet-4-6',
-      '--custom-compatibility', 'anthropic',
+      '--custom-model-id', OPENCLAW_DEFAULT_MODEL,
+      '--custom-compatibility', 'openai',
+      '--gateway-port', String(gatewayPort),
       '--install-daemon',
     ], { preferNpx: runtime.via === 'npx' })
 
     if (result.status !== 0) {
       console.log(chalk.yellow('  ⚠️  onboard 失败，使用备用配置...'))
-      _writeFallbackConfig(apiKey, baseUrl, selectedModels, primaryModel, gatewayPort)
-    } else {
-      _setGatewayPort(gatewayPort, runtime.via === 'npx')
     }
+
+    writeManagedConfig(
+      result.status === 0 ? readConfig() : {},
+      apiKey,
+      baseUrlAnthropic,
+      baseUrlOpenAI,
+      selectedModels,
+      gatewayPort,
+    )
 
     _disableGatewayAuth(runtime.via === 'npx')
     const serviceReady = _installGatewayService(gatewayPort, runtime.via === 'npx')
@@ -378,6 +458,7 @@ module.exports = {
     const dashUrl = `http://127.0.0.1:${gatewayPort}/`
     console.log(chalk.cyan('\n  → 浏览器打开（无需 token）:'))
     console.log(chalk.bold.cyan(`     ${dashUrl}`))
+    console.log(chalk.gray(`     默认模型: ${OPENCLAW_DEFAULT_MODEL}`))
 
     return {
       file: CONFIG_FILE,
@@ -394,9 +475,10 @@ module.exports = {
 
   getConfigPath() { return CONFIG_FILE },
   getGatewayPort() { return getConfiguredGatewayPort() },
+  getPrimaryModel() { return getConfiguredPrimaryModel() },
   getPortListeners(port = getConfiguredGatewayPort()) { return listPortListeners(port) },
   get hint() {
-    return `Gateway 已启动，打开浏览器即可使用（默认端口 ${getConfiguredGatewayPort()}）`
+    return `Gateway 已启动，默认模型为 ${getConfiguredPrimaryModel() || OPENCLAW_DEFAULT_MODEL}`
   },
   get launchCmd() {
     return getLaunchCommand(getConfiguredGatewayPort())
