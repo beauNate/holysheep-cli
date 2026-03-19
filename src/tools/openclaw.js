@@ -148,22 +148,12 @@ function isRoutingRegressionVersion(version) {
   return OPENCLAW_ROUTING_REGRESSION_VERSION.test(String(version || '').trim())
 }
 
-function sanitizeSelectedModelsForRuntime(selectedModels, runtimeVersion) {
-  if (!isRoutingRegressionVersion(runtimeVersion)) {
-    return { models: selectedModels, warning: '' }
+function getRoutingRegressionWarning(runtimeVersion, minimaxModelRef) {
+  if (!isRoutingRegressionVersion(runtimeVersion) || !minimaxModelRef) {
+    return ''
   }
 
-  const originalModels = Array.isArray(selectedModels) ? selectedModels : []
-  const filteredModels = originalModels.filter((model) => !model.startsWith('MiniMax-'))
-
-  if (filteredModels.length === originalModels.length) {
-    return { models: selectedModels, warning: '' }
-  }
-
-  return {
-    models: filteredModels,
-    warning: '当前 OpenClaw 2026.3.13 存在 provider 路由回归，已暂时跳过 MiniMax 模型，避免 /model 和网页切换时报 model not allowed。升级 OpenClaw 后可重新运行 hs setup 恢复。',
-  }
+  return `当前 OpenClaw 2026.3.13 存在 provider 路由回归，但 HolySheep 仍会保留 MiniMax 配置。若网页模型切换失败，请直接输入 /model ${minimaxModelRef}，或升级 OpenClaw 后再试。`
 }
 
 function readConfig() {
@@ -293,7 +283,7 @@ function buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModel
 
   const openaiProviderName = buildProviderName(baseUrlOpenAI, 'custom-openai')
   const anthropicProviderName = buildProviderName(baseUrlAnthropic, 'custom-anthropic')
-  const minimaxProviderName = buildProviderName(`${baseUrlAnthropic.replace(/\/+$/, '')}/minimax`, 'custom-anthropic')
+  const minimaxProviderName = buildProviderName(`${baseUrlAnthropic.replace(/\/+$/, '')}/minimax`, 'custom-minimax')
 
   const providers = {
     [openaiProviderName]: {
@@ -329,6 +319,7 @@ function buildManagedPlan(apiKey, baseUrlAnthropic, baseUrlOpenAI, selectedModel
     providers,
     managedModelRefs,
     primaryRef: `${openaiProviderName}/${OPENCLAW_DEFAULT_MODEL}`,
+    minimaxRef: minimaxModels[0] ? `${minimaxProviderName}/${minimaxModels[0]}` : '',
   }
 }
 
@@ -485,11 +476,6 @@ module.exports = {
     }
     this._lastRuntimeCommand = runtime.command
 
-    const sanitizedSelection = sanitizeSelectedModelsForRuntime(selectedModels, runtime.version)
-    if (sanitizedSelection.warning) {
-      console.log(chalk.yellow(`  ⚠️  ${sanitizedSelection.warning}`))
-    }
-
     runOpenClaw(['gateway', 'stop'], { preferNpx: runtime.via === 'npx' })
 
     const gatewayPort = findAvailableGatewayPort(DEFAULT_GATEWAY_PORT)
@@ -530,14 +516,19 @@ module.exports = {
       console.log(chalk.yellow('  ⚠️  onboard 失败，使用备用配置...'))
     }
 
-    writeManagedConfig(
+    const plan = writeManagedConfig(
       result.status === 0 ? readConfig() : {},
       apiKey,
       baseUrlAnthropic,
       baseUrlOpenAI,
-      sanitizedSelection.models,
+      selectedModels,
       gatewayPort,
     )
+
+    const routingRegressionWarning = getRoutingRegressionWarning(runtime.version, plan.minimaxRef)
+    if (routingRegressionWarning) {
+      console.log(chalk.yellow(`  ⚠️  ${routingRegressionWarning}`))
+    }
 
     _disableGatewayAuth(runtime.via === 'npx')
     const serviceReady = _installGatewayService(gatewayPort, runtime.via === 'npx')
