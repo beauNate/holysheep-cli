@@ -56,7 +56,7 @@ program
 🐑  HolySheep CLI v${pkg.version}
 官方 Claude / GPT / Gemini API · ¥1=$1 · https://holysheep.ai
 
-支持工具: Claude Code · Codex · Gemini CLI · OpenCode · OpenClaw · Aider · Cursor · Continue
+支持工具: Claude Code · Codex · Droid · Gemini CLI · OpenCode · OpenClaw · Aider · Cursor · Continue
 `)
 
 // ── login ────────────────────────────────────────────────────────────────────

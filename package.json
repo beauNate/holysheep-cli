@@ -1,7 +1,7 @@
 {
   "name": "@simonyea/holysheep-cli",
-  "version": "1.5.8",
-  "description": "OpenAI/Anthropic/Gemini API relay for China developers — configure Claude Code, Cursor, Continue, Cline, Codex in one command. ¥1=$1, no VPN needed.",
+  "version": "1.6.2",
+  "description": "Claude Code/Cursor/Cline API relay for China — ¥1=$1, WeChat/Alipay payment, no credit card, no VPN. One command setup for all AI coding tools.",
   "keywords": [
     "openai-china",
     "claude-china",
@@ -32,12 +32,17 @@
     "gpt",
     "llm",
     "api-key",
-    "base-url"
+    "base-url",
+    "claude-code-china",
+    "claude-code-relay",
+    "wechat-pay-api",
+    "alipay-api",
+    "no-credit-card"
   ],
   "homepage": "https://holysheep.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/holysheep123/holysheep-cli"
+    "url": "git+https://github.com/holysheep123/holysheep-cli.git"
   },
   "license": "MIT",
   "bin": {

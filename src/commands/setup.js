@@ -112,9 +112,11 @@ async function setup(options) {
 
   // Step 1.5: 选择要配置的模型
   const MODEL_CHOICES = [
-    { name: 'claude-sonnet-4-6  (Sonnet 4.6, 均衡推荐)', value: 'claude-sonnet-4-6',       checked: true },
-    { name: 'claude-opus-4-6    (Opus 4.6, 强力旗舰)',   value: 'claude-opus-4-6',         checked: true },
-    { name: 'MiniMax-M2.5-highspeed (高速经济版)',        value: 'MiniMax-M2.5-highspeed',  checked: true },
+    { name: 'gpt-5.4             (GPT 5.4, 通用编码)',    value: 'gpt-5.4',                 checked: true },
+    { name: 'claude-sonnet-4-6   (Sonnet 4.6, 均衡推荐)', value: 'claude-sonnet-4-6',       checked: true },
+    { name: 'claude-opus-4-6     (Opus 4.6, 强力旗舰)',   value: 'claude-opus-4-6',         checked: true },
+    { name: 'MiniMax-M2.7-highspeed (高速经济版)',         value: 'MiniMax-M2.7-highspeed',  checked: true },
+    { name: 'claude-haiku-4-5    (Haiku 4.5, 轻快便宜)',  value: 'claude-haiku-4-5',        checked: true },
   ]
   const { selectedModels } = await inquirer.prompt([{
     type: 'checkbox',
@@ -193,7 +195,7 @@ async function setup(options) {
           justInstalled.add(tool.id)
         } else if (tool.id === 'openclaw') {
           // openclaw 安装失败时（如无 git），改用 npx 模式继续配置
-          // checkInstalled() 里已有 npx fallback，标记为已安装
+          // 这里直接标记为本次可配置，具体执行阶段再走 npx fallback
           console.log(chalk.yellow(`  ⚠️  全局安装失败，将使用 npx openclaw 代替`))
           tool._useNpx = true
           justInstalled.add(tool.id)
