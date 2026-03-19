@@ -420,9 +420,10 @@ async function relayOpenAIRequest(requestBody, config, res) {
   })
 
   const text = await upstream.text()
-  if (!requestBody.stream) {
-    const parsed = parseOpenAIStreamText(text)
-    if (parsed) return sendJson(res, upstream.status, parsed)
+  const parsed = parseOpenAIStreamText(text)
+  if (upstream.ok && parsed) {
+    if (requestBody.stream) return sendOpenAIStream(res, parsed)
+    return sendJson(res, upstream.status, parsed)
   }
 
   res.writeHead(upstream.status, {

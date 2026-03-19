@@ -461,7 +461,8 @@ function getDashboardUrl(port, preferNpx = false) {
     timeout: preferNpx ? 60000 : 20000,
   })
   if (result.status === 0) {
-    const match = String(result.stdout || '').match(/Dashboard URL:\s*(\S+)/)
+    const output = String(result.stdout || '')
+    const match = output.match(/Dashboard URL:\s*(\S+)/) || output.match(/(https?:\/\/\S+)/)
     if (match) return match[1]
   }
   return `http://127.0.0.1:${port}/`

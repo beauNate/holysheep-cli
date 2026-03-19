@@ -1,6 +1,6 @@
 {
   "name": "@simonyea/holysheep-cli",
-  "version": "1.6.11",
+  "version": "1.6.12",
   "description": "Claude Code/Cursor/Cline API relay for China — ¥1=$1, WeChat/Alipay payment, no credit card, no VPN. One command setup for all AI coding tools.",
   "keywords": [
     "openai-china",
