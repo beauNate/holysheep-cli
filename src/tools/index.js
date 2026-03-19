@@ -5,10 +5,5 @@ module.exports = [
   require('./claude-code'),
   require('./codex'),
   require('./droid'),
-  require('./gemini-cli'),
-  require('./opencode'),
   require('./openclaw'),
-  require('./aider'),
-  require('./cursor'),
-  require('./continue'),
 ]

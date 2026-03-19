@@ -12,9 +12,10 @@
  *   [model_providers.holysheep]
  *   name = "HolySheep"
  *   base_url = "https://api.holysheep.ai/v1"
- *   env_key = "OPENAI_API_KEY"
+ *   api_key = "cr_xxx"
  *
  * 注意：旧的 config.json 会被 Rust Codex 忽略！
+ * 注意：使用 api_key 而非 env_key，避免 Windows 上需要重启终端才能生效的问题
  */
 const fs   = require('fs')
 const path = require('path')
@@ -110,7 +111,7 @@ function writeTomlConfig(apiKey, baseUrlOpenAI, model) {
     `[model_providers.holysheep]`,
     `name = "HolySheep"`,
     `base_url = "${baseUrlOpenAI}"`,
-    `env_key = "OPENAI_API_KEY"`,
+    `api_key = "${apiKey}"`,
     '',
   ].join('\n')
 
@@ -134,12 +135,12 @@ function writeJsonConfigIfNeeded(apiKey, baseUrlOpenAI, model) {
     jsonConfig.model_providers.holysheep = {
       name: 'HolySheep',
       base_url: baseUrlOpenAI,
-      env_key: 'OPENAI_API_KEY',
+      api_key: apiKey,
     }
     jsonConfig.providers.holysheep = {
       name: 'HolySheep',
       baseURL: baseUrlOpenAI,
-      envKey: 'OPENAI_API_KEY',
+      apiKey,
     }
     fs.writeFileSync(CONFIG_FILE_JSON, JSON.stringify(jsonConfig, null, 2), 'utf8')
   } catch {}
